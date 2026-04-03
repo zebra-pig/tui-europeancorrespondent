@@ -1,0 +1,238 @@
+query FetchLatestEdition($locale: Locale) {
+  editions(locale: $locale) {
+    nodes {
+      id
+      title
+      date
+      items {
+        ...EditionItemSummary
+      }
+    }
+  }
+}
+
+query FetchHomepage($locale: Locale) {
+  page(name: "homepage", locale: $locale) {
+    id
+    name
+    sections {
+      __typename
+      ... on HeroSection {
+        type
+        editionItem1 { ...EditionItemSummary }
+        editionItem2 { ...EditionItemSummary }
+        editionItem3 { ...EditionItemSummary }
+        editionItem4 { ...EditionItemSummary }
+        editionItem5 { ...EditionItemSummary }
+      }
+      ... on EditionItemListSection {
+        type
+        heading
+        subheading
+        headerColor { light dark }
+        editionItems { ...EditionItemSummary }
+      }
+      ... on EditionItemHighlightSection {
+        type
+        editionItem { ...EditionItemSummary }
+      }
+      ... on EditionItemInlineSection {
+        type
+        editionItem { ...EditionItemSummary }
+      }
+    }
+  }
+}
+
+query FetchArticle($slug: String, $locale: Locale) {
+  editionItem(slug: $slug, locale: $locale) {
+    ...EditionItemFull
+  }
+}
+
+query SearchArticles($filter: EditionItemFilter, $locale: Locale) {
+  editionItems(filter: $filter, locale: $locale, first: 20) {
+    nodes {
+      ...EditionItemSummary
+    }
+  }
+}
+
+fragment EditionItemSummary on EditionItem {
+  id
+  title
+  slug
+  date
+  previewText
+  wordCount
+  expectedReadTimeSeconds
+  contentType
+  content {
+    __typename
+    ... on Longform {
+      type
+      longformTitle: title
+      header
+      headerColor { light dark }
+      teaser
+      cardColor { light dark }
+      titleColor { light dark }
+      templateType
+      topImage { url(transform: { width: 800, quality: 80 }) }
+      authors { firstName lastName }
+    }
+    ... on Feature {
+      type
+      featureTitle: title
+      header
+      headerColor { light dark }
+      label
+      labelColor { light dark }
+      image { url(transform: { width: 800, quality: 80 }) }
+      authors { firstName lastName }
+      countryCodes
+    }
+    ... on DataVisualisation {
+      type
+      dvTitle: title
+      header
+      headerColor { light dark }
+      label
+      labelColor { light dark }
+      image { url(transform: { width: 800, quality: 80 }) }
+      authors { firstName lastName }
+    }
+    ... on CulturalRecommendation {
+      type
+      crTitle: title
+      header
+      headerColor { light dark }
+      coverImage { url(transform: { width: 800, quality: 80 }) }
+      authors { firstName lastName }
+    }
+    ... on EditorsNote {
+      type
+      authors { firstName lastName }
+    }
+    ... on CommunityNote {
+      type
+      cnTitle: title
+      label
+      signature
+      authors { firstName lastName }
+    }
+    ... on Advert {
+      type
+      adTitle: title
+    }
+  }
+}
+
+fragment EditionItemFull on EditionItem {
+  id
+  title
+  slug
+  date
+  previewText
+  wordCount
+  expectedReadTimeSeconds
+  contentType
+  content {
+    __typename
+    ... on Longform {
+      type
+      longformTitle: title
+      header
+      headerColor { light dark }
+      teaser
+      cardColor { light dark }
+      titleColor { light dark }
+      templateType
+      authors { firstName lastName }
+      content {
+        ...ContentBlockFields
+      }
+    }
+    ... on Feature {
+      type
+      featureTitle: title
+      header
+      headerColor { light dark }
+      label
+      labelColor { light dark }
+      authors { firstName lastName }
+      countryCodes
+      lead {
+        ...ContentBlockFields
+      }
+      comment {
+        ...ContentBlockFields
+      }
+    }
+    ... on DataVisualisation {
+      type
+      dvTitle: title
+      header
+      headerColor { light dark }
+      label
+      labelColor { light dark }
+      authors { firstName lastName }
+      description {
+        ...ContentBlockFields
+      }
+    }
+    ... on CulturalRecommendation {
+      type
+      crTitle: title
+      header
+      headerColor { light dark }
+      authors { firstName lastName }
+      description {
+        ...ContentBlockFields
+      }
+    }
+    ... on EditorsNote {
+      type
+      authors { firstName lastName }
+      content {
+        ...ContentBlockFields
+      }
+    }
+    ... on CommunityNote {
+      type
+      cnTitle: title
+      label
+      signature
+      authors { firstName lastName }
+      descriptionTop {
+        ...ContentBlockFields
+      }
+      descriptionBottom {
+        ...ContentBlockFields
+      }
+    }
+    ... on Advert {
+      type
+      adTitle: title
+    }
+  }
+}
+
+fragment ContentBlockFields on ContentBlock {
+  __typename
+  ... on ParagraphContentBlock {
+    type
+    text
+  }
+  ... on HeadingContentBlock {
+    type
+    text
+  }
+  ... on ImageContentBlock {
+    type
+    image {
+      caption
+      alt
+    }
+  }
+}
