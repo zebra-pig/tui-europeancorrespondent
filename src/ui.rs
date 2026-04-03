@@ -268,23 +268,31 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
         }
 
         if let Some(tr) = tile_rect {
-            // Brighten existing border cells by removing DIM fg and adding BOLD
-            let style_border = |buf: &mut Buffer, vx: u16, vy: u16| {
+            // Draw rounded border characters into the space-border cells
+            let border = ratatui::symbols::border::ROUNDED;
+            let set_cell = |buf: &mut Buffer, vx: u16, vy: u16, sym: &str| {
                 let sy = vy as i32 - scroll as i32;
                 if sy >= 0 && (sy as u16) < area.height && vx < area.width {
                     if let Some(cell) = buf.cell_mut((area.x + vx, area.y + sy as u16)) {
-                        cell.set_style(Style::reset().add_modifier(Modifier::BOLD));
+                        cell.set_symbol(sym);
+                        cell.set_style(Style::reset());
                     }
                 }
             };
-            // All border cells: top/bottom rows, left/right columns
-            for x in tr.x..tr.x + tr.width {
-                style_border(frame_buf, x, tr.y);
-                style_border(frame_buf, x, tr.y + tr.height.saturating_sub(1));
+            // Corners
+            set_cell(frame_buf, tr.x, tr.y, border.top_left);
+            set_cell(frame_buf, tr.x + tr.width - 1, tr.y, border.top_right);
+            set_cell(frame_buf, tr.x, tr.y + tr.height - 1, border.bottom_left);
+            set_cell(frame_buf, tr.x + tr.width - 1, tr.y + tr.height - 1, border.bottom_right);
+            // Horizontal
+            for x in (tr.x + 1)..(tr.x + tr.width - 1) {
+                set_cell(frame_buf, x, tr.y, border.horizontal_top);
+                set_cell(frame_buf, x, tr.y + tr.height - 1, border.horizontal_bottom);
             }
-            for y in tr.y..tr.y + tr.height {
-                style_border(frame_buf, tr.x, y);
-                style_border(frame_buf, tr.x + tr.width.saturating_sub(1), y);
+            // Vertical
+            for y in (tr.y + 1)..(tr.y + tr.height - 1) {
+                set_cell(frame_buf, tr.x, y, border.vertical_left);
+                set_cell(frame_buf, tr.x + tr.width - 1, y, border.vertical_right);
             }
         } else {
             // Compact item: ▸ marker + bold title
@@ -389,10 +397,14 @@ fn render_tile_buf(buf: &mut Buffer, image_cache: &mut Option<crate::images::Ima
 
     let title = item.title.as_deref().unwrap_or("Untitled");
 
-    // Always draw a rounded border - dim when not focused
+    // Always reserve border space for consistent sizing.
+    // Space-border when not focused (invisible), overlay will draw real border when selected.
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(DIM));
+        .border_set(ratatui::symbols::border::Set {
+            top_left: " ", top_right: " ", bottom_left: " ", bottom_right: " ",
+            horizontal_top: " ", horizontal_bottom: " ",
+            vertical_left: " ", vertical_right: " ",
+        });
 
     let inner = block.inner(area);
     block.render(area, buf);
