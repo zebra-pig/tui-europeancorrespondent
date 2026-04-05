@@ -27,6 +27,14 @@ enum AsyncMsg {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse CLI args: -r <slug> to open an article directly
+    let args: Vec<String> = std::env::args().collect();
+    let open_slug = if args.len() >= 3 && args[1] == "-r" {
+        Some(args[2].clone())
+    } else {
+        None
+    };
+
     // Detect image protocol before raw mode
     let picker = Picker::from_query_stdio().ok();
 
@@ -37,10 +45,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new();
 
     let (tx, mut rx) = mpsc::unbounded_channel::<AsyncMsg>();
-    let client = Arc::new(api::ApiClient::new());
+    // API key: baked in from .env at compile time, overridable at runtime
+    let api_key = std::env::var("EC_API_KEY").ok()
+        .or_else(|| {
+            let key = env!("EC_API_KEY");
+            if key.is_empty() || key == "your-api-key-here" { None } else { Some(key.to_string()) }
+        });
+    let client = Arc::new(api::ApiClient::new(api_key));
 
-    // Image cache
+    // Image cache + font metrics
+    // Use halfblocks fallback if picker detection failed
+    let picker = picker.or_else(|| Some(Picker::from_fontsize((8, 16))));
     if let Some(ref p) = picker {
+        let fs = p.font_size();
+        if fs.1 > 0 {
+            app.cell_aspect = fs.0 as f64 / fs.1 as f64;
+        }
         let (cache, mut img_rx) = images::ImageCache::new(p);
         let tx2 = tx.clone();
         tokio::spawn(async move {
@@ -51,8 +71,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.image_cache = Some(cache);
     }
 
-    // Load homepage
-    {
+    // Load homepage or open article directly
+    if let Some(slug) = open_slug {
+        app.view = app::View::Article;
+        app.article = app::LoadingState::Loading;
+        let tx = tx.clone();
+        let client = client.clone();
+        let locale = app.locale.clone();
+        tokio::spawn(async move {
+            let result = client.fetch_article(&slug, &locale).await;
+            let _ = tx.send(AsyncMsg::ArticleLoaded(result));
+        });
+    } else {
         let tx = tx.clone();
         let client = client.clone();
         let locale = app.locale.clone();
@@ -102,6 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     let size = terminal.size()?;
                     app.build_article_lines(size.width);
+                    app.article_dirty = true;
                 }
                 AsyncMsg::SearchResults(result) => {
                     app.search_results = match result {
@@ -124,6 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         cache.insert(url, img);
                     }
                     app.home_dirty = true;
+                    app.article_dirty = true;
                 }
             }
         }

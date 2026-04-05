@@ -1,7 +1,7 @@
 use graphql_client::GraphQLQuery;
 use reqwest::Client;
 
-const API_URL: &str = "http://localhost:3001/graphql";
+const API_URL: &str = "https://api.europeancorrespondent.com/graphql";
 
 type Locale = String;
 type Float = f64;
@@ -112,7 +112,9 @@ pub enum ItemContent {
         title_color: DynColor,
         image_url: Option<String>,
         authors: Vec<String>,
+        introduction_comment: Vec<ContentBlock>,
         body: Vec<ContentBlock>,
+        comment: Vec<ContentBlock>,
     },
     Feature {
         title: String,
@@ -123,6 +125,7 @@ pub enum ItemContent {
         image_url: Option<String>,
         authors: Vec<String>,
         country_codes: Vec<String>,
+        introduction_comment: Vec<ContentBlock>,
         lead: Vec<ContentBlock>,
         comment: Vec<ContentBlock>,
     },
@@ -133,6 +136,8 @@ pub enum ItemContent {
         label: Option<String>,
         label_color: DynColor,
         image_url: Option<String>,
+        image_width: Option<i64>,
+        image_height: Option<i64>,
         authors: Vec<String>,
         description: Vec<ContentBlock>,
     },
@@ -251,7 +256,7 @@ impl ItemContent {
 pub enum ContentBlock {
     Paragraph(String),
     Heading(String),
-    Image { caption: Option<String>, alt: Option<String> },
+    Image { url: Option<String>, width: Option<i64>, height: Option<i64>, caption: Option<String>, alt: Option<String> },
 }
 
 // Homepage sections
@@ -398,6 +403,9 @@ fn convert_blocks(blocks: &[fetch_article::ContentBlockFields]) -> Vec<ContentBl
             }
             fetch_article::ContentBlockFields::ImageContentBlock(i) => {
                 ContentBlock::Image {
+                    url: Some(i.image.url.clone()),
+                    width: i.image.width,
+                    height: i.image.height,
                     caption: i.image.caption.clone(),
                     alt: i.image.alt.clone(),
                 }
@@ -417,19 +425,21 @@ macro_rules! convert_summary_content_impl {
                     header_color: opt_color(&l.header_color), card_color: req_color(&l.card_color),
                     title_color: opt_color(&l.title_color),
                     image_url: Some(l.top_image.url),
-                    authors: author_names(&l.authors), body: vec![],
+                    authors: author_names(&l.authors),
+                    introduction_comment: vec![], body: vec![], comment: vec![],
                 },
                 Feature(f) => ItemContent::Feature {
                     title: f.feature_title, header: f.header, label: f.label,
                     header_color: opt_color(&f.header_color), label_color: opt_color(&f.label_color),
                     image_url: f.image.map(|i| i.url),
                     authors: author_names(&f.authors), country_codes: f.country_codes,
-                    lead: vec![], comment: vec![],
+                    introduction_comment: vec![], lead: vec![], comment: vec![],
                 },
                 DataVisualisation(d) => ItemContent::DataVis {
                     title: d.dv_title, header: d.header, label: d.label,
                     header_color: opt_color(&d.header_color), label_color: opt_color(&d.label_color),
                     image_url: d.image.map(|i| i.url),
+                    image_width: None, image_height: None,
                     authors: author_names(&d.authors), description: vec![],
                 },
                 CulturalRecommendation(c) => ItemContent::CulturalRec {
@@ -460,20 +470,25 @@ fn convert_full_content(c: fetch_article::EditionItemFullContent) -> ItemContent
             header_color: opt_color(&l.header_color), card_color: req_color(&l.card_color),
             title_color: opt_color(&l.title_color), image_url: None,
             authors: author_names(&l.authors),
+            introduction_comment: l.introduction_comment.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
             body: convert_blocks(&l.content),
+            comment: l.comment.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
         },
         Feature(f) => ItemContent::Feature {
             title: f.feature_title, header: f.header, label: f.label,
             header_color: opt_color(&f.header_color), label_color: opt_color(&f.label_color),
             image_url: None,
             authors: author_names(&f.authors), country_codes: f.country_codes,
+            introduction_comment: f.introduction_comment.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
             lead: f.lead.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
             comment: f.comment.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
         },
         DataVisualisation(d) => ItemContent::DataVis {
             title: d.dv_title, header: d.header, label: d.label,
             header_color: opt_color(&d.header_color), label_color: opt_color(&d.label_color),
-            image_url: None,
+            image_url: d.image.as_ref().map(|i| i.url.clone()),
+            image_width: d.image.as_ref().and_then(|i| i.width),
+            image_height: d.image.as_ref().and_then(|i| i.height),
             authors: author_names(&d.authors),
             description: d.description.as_ref().map(|b| convert_blocks(b)).unwrap_or_default(),
         },
@@ -528,17 +543,22 @@ fn convert_search_item(item: search_articles::EditionItemSummary) -> EditionItem
 
 pub struct ApiClient {
     client: Client,
+    api_key: Option<String>,
 }
 
 impl ApiClient {
-    pub fn new() -> Self {
-        Self { client: Client::new() }
+    pub fn new(api_key: Option<String>) -> Self {
+        Self { client: Client::new(), api_key }
     }
 
     async fn gql<Q: GraphQLQuery>(&self, vars: Q::Variables) -> Result<Q::ResponseData, String>
     where Q::Variables: serde::Serialize, Q::ResponseData: serde::de::DeserializeOwned {
         let body = Q::build_query(vars);
-        let resp: graphql_client::Response<Q::ResponseData> = self.client.post(API_URL).json(&body).send().await
+        let mut req = self.client.post(API_URL).json(&body);
+        if let Some(key) = &self.api_key {
+            req = req.header("x-api-key", key);
+        }
+        let resp: graphql_client::Response<Q::ResponseData> = req.send().await
             .map_err(|e| format!("Request failed: {}", e))?.json().await
             .map_err(|e| format!("Parse failed: {}", e))?;
         if let Some(errors) = &resp.errors {
@@ -623,7 +643,7 @@ impl ApiClient {
 
     pub async fn search_articles(&self, query_text: &str, locale: &str) -> Result<Vec<EditionItem>, String> {
         let filter = search_articles::EditionItemFilter {
-            plain_text: Some(search_articles::EditionItemplainTextFilterField {
+            plain_text: Some(search_articles::StringFilterField {
                 contains: Some(query_text.to_string()),
                 eq: None, neq: None, in_: None, nin: None, null: None,
                 gt: None, gte: None, lt: None, lte: None,

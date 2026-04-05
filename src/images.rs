@@ -9,9 +9,11 @@ use tokio::sync::mpsc;
 
 pub struct CachedImage {
     pub source: DynamicImage,
-    /// Protocol cached for a specific (width, height) in cells
-    pub proto: Option<StatefulProtocol>,
-    pub proto_size: (u16, u16),
+    /// Cover protocol: pre-cropped to fill a specific (w, h) cell size
+    pub cover_proto: Option<StatefulProtocol>,
+    pub cover_size: (u16, u16),
+    /// Scalable protocol for inline rendering
+    pub fit_proto: Option<StatefulProtocol>,
 }
 
 pub struct ImageCache {
@@ -43,23 +45,41 @@ impl ImageCache {
         self.pending.remove(&url);
         self.images.insert(url, CachedImage {
             source: img,
-            proto: None,
-            proto_size: (0, 0),
+            cover_proto: None,
+            cover_size: (0, 0),
+            fit_proto: None,
         });
     }
 
-    /// Get a StatefulProtocol for the given URL, pre-resized to cover (w, h) cells.
-    /// Creates/re-creates the protocol if the size changed.
+    /// Get protocol for inline article images. Uses the original source image
+    /// and relies on StatefulImage with Resize::Scale to handle sizing at render time.
+    pub fn get_scalable(&mut self, url: &str) -> Option<&mut StatefulProtocol> {
+        let proto_type = self.proto_type;
+
+        let cached = self.images.get_mut(url)?;
+        if cached.fit_proto.is_none() {
+            // For halfblocks, font_size must be (1, 2) because the protocol
+            // maps 1 cell = 1px wide × 2px tall. Using the real font_size
+            // causes StatefulProtocol's internal resize to compute wrong dimensions.
+            let effective_font = match proto_type {
+                ProtocolType::Halfblocks => (1u16, 2u16),
+                _ => self.font_size,
+            };
+            let mut picker = Picker::from_fontsize(effective_font);
+            picker.set_protocol_type(proto_type);
+            cached.fit_proto = Some(picker.new_resize_protocol(cached.source.clone()));
+        }
+        cached.fit_proto.as_mut()
+    }
+
+    /// Get protocol for Cover rendering (cropped to fill w x h cells).
     pub fn get_cover(&mut self, url: &str, w: u16, h: u16) -> Option<&mut StatefulProtocol> {
         let font = self.font_size;
         let proto_type = self.proto_type;
 
         let cached = self.images.get_mut(url)?;
 
-        // Rebuild protocol if size changed
-        if cached.proto.is_none() || cached.proto_size != (w, h) {
-            // object-fit: cover = resize_to_fill then crop
-            // Subtract 1 cell to avoid edge artifacts from rounding
+        if cached.cover_proto.is_none() || cached.cover_size != (w, h) {
             let render_w = w.saturating_sub(1).max(1);
             let render_h = h.saturating_sub(1).max(1);
             let px_w = (render_w as u32) * (font.0 as u32);
@@ -68,16 +88,16 @@ impl ImageCache {
 
             let covered = cached.source.resize_to_fill(
                 px_w, px_h,
-                image::imageops::FilterType::Triangle,
+                image::imageops::FilterType::Nearest,
             );
 
             let mut picker = Picker::from_fontsize(font);
             picker.set_protocol_type(proto_type);
-            cached.proto = Some(picker.new_resize_protocol(covered));
-            cached.proto_size = (w, h);
+            cached.cover_proto = Some(picker.new_resize_protocol(covered));
+            cached.cover_size = (w, h);
         }
 
-        cached.proto.as_mut()
+        cached.cover_proto.as_mut()
     }
 
     pub fn fetch(&mut self, url: &str) {

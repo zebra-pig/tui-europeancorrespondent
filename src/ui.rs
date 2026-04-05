@@ -34,19 +34,39 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     if area.width == 0 || area.height < 5 { return; }
 
+    let logo_fits = area.width >= 79;
+    let header_h = if logo_fits { 4 } else { 2 };
+
     let [header, content, footer] = Layout::vertical([
-        Constraint::Length(2), Constraint::Fill(1), Constraint::Length(1),
+        Constraint::Length(header_h), Constraint::Fill(1), Constraint::Length(1),
     ]).areas(area);
 
-    // Header
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("The ", Style::default().fg(DIM)),
-            "European ".bold(),
-            "Correspondent".bold(),
-        ])).alignment(Alignment::Center),
-        header,
-    );
+    // Header: ASCII logo if wide enough, fallback to text
+    if logo_fits {
+        let logo = include_str!("../ascii/ascii_logo_final.txt");
+        let max_w = logo.lines().filter(|l| !l.is_empty()).map(|l| l.chars().count()).max().unwrap_or(0);
+        let block_pad = (header.width as usize).saturating_sub(max_w) / 2;
+        let prefix: String = " ".repeat(block_pad);
+        let logo_lines: Vec<Line> = logo.lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                // Right-pad each line to max char width, then prepend centering prefix
+                let char_w = l.chars().count();
+                let right_pad = max_w.saturating_sub(char_w);
+                Line::from(format!("{}{}{}", prefix, l, " ".repeat(right_pad)))
+            })
+            .collect();
+        frame.render_widget(Paragraph::new(logo_lines), header);
+    } else {
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                "The ".dark_gray(),
+                "European ".bold(),
+                "Correspondent".bold(),
+            ])).alignment(Alignment::Center),
+            header,
+        );
+    }
 
     match &app.view {
         View::Home => draw_home(frame, app, content),
@@ -88,11 +108,12 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
         HomepageSection::Highlight { item } | HomepageSection::Inline { item } => vec![item],
     }).collect();
 
-    // Phase 1: measure total height and track item offsets
-    let hero_h = (area.height * 9 / 20).max(14);
+    // Phase 1: measure total height and track item offsets + heights
+    let hero_h = (area.height * 63 / 100).max(20);
     let mut total_h: u16 = 1;
     let mut item_idx: usize = 0;
     let mut item_offsets: Vec<u16> = Vec::new();
+    let mut item_heights: Vec<u16> = Vec::new();
     let mut section_layouts: Vec<SectionLayout> = Vec::new();
     let mut color_idx: usize = 0;
 
@@ -100,13 +121,21 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
         match section {
             HomepageSection::Hero { items } => {
                 let y = total_h;
+                let half = hero_h / 2;
                 for (i, _) in items.iter().enumerate() {
-                    // Each hero item's offset for scroll tracking
-                    let half = hero_h / 2;
-                    let offset = if w >= 96 && items.len() >= 5 {
-                        match i { 0 => y, 1 | 2 => y, 3 | 4 => y + half, _ => y }
-                    } else { y + (i as u16) * (hero_h / items.len().max(1) as u16) };
+                    let (offset, height) = if w >= 96 && items.len() >= 5 {
+                        match i {
+                            0 => (y, hero_h),          // center: full height
+                            1 | 2 => (y, half),        // top row
+                            3 | 4 => (y + half, hero_h - half), // bottom row
+                            _ => (y, hero_h),
+                        }
+                    } else {
+                        let tile_h = hero_h / items.len().max(1) as u16;
+                        (y + (i as u16) * tile_h, tile_h)
+                    };
                     item_offsets.push(offset);
+                    item_heights.push(height);
                     item_idx += 1;
                 }
                 section_layouts.push(SectionLayout::Hero { y, height: hero_h, count: items.len() });
@@ -128,7 +157,8 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 }
                 for item in items {
                     item_offsets.push(total_h + lines.len() as u16);
-                    build_compact_item(item, false, &mut lines); // never selected in cached buffer
+                    item_heights.push(3); // compact: title + authors + blank
+                    build_compact_item(item, false, &mut lines);
                     item_idx += 1;
                 }
                 lines.push(Line::from(""));
@@ -138,8 +168,9 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 total_h += h;
             }
             HomepageSection::Highlight { item } => {
-                let highlight_h = (area.height / 3).max(10);
+                let highlight_h = (area.height * 47 / 100).max(14);
                 item_offsets.push(total_h);
+                item_heights.push(highlight_h);
                 section_layouts.push(SectionLayout::Highlight {
                     y: total_h,
                     height: highlight_h,
@@ -152,6 +183,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
             HomepageSection::Inline { item } => {
                 let mut lines = Vec::new();
                 item_offsets.push(total_h);
+                item_heights.push(2);
                 build_compact_item(item, false, &mut lines);
                 item_idx += 1;
                 let h = lines.len() as u16;
@@ -163,6 +195,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
 
     // Phase 2: update offsets + scroll
     app.home_view.item_offsets = item_offsets;
+    app.home_view.item_heights = item_heights;
     app.home_view.ensure_visible(area.height);
     app.home_view.scroll = if total_h > area.height {
         app.home_view.scroll.min(total_h.saturating_sub(area.height))
@@ -634,19 +667,10 @@ fn build_hero_item(item: &EditionItem, width: usize, selected: bool, lines: &mut
 }
 
 fn build_compact_item(item: &EditionItem, selected: bool, lines: &mut Vec<Line<'static>>) {
-    let hdr_color = item.content.header_color()
-        .and_then(|c| c.accent_rgb())
-        .map(|(r,g,b)| Color::Rgb(r,g,b));
     let sel = if selected { "\u{25B8} " } else { "  " };
     let bold = if selected { Modifier::BOLD } else { Modifier::empty() };
 
     let mut spans: Vec<Span> = vec![Span::raw("  "), Span::raw(sel)];
-    if let Some(header) = item.content.header() {
-        let c = hdr_color.unwrap_or(DIM);
-        spans.push(dot_span(c));
-        spans.push(Span::styled(header.to_string(), Style::default().fg(c)));
-        spans.push("  ".dark_gray());
-    }
     if let Some((label, lc)) = item.content.label_info() {
         let c = lc.light.map(|(r,g,b)| Color::Rgb(r,g,b)).unwrap_or(Color::Red);
         spans.push(label_span(label, c));
@@ -659,52 +683,125 @@ fn build_compact_item(item: &EditionItem, selected: bool, lines: &mut Vec<Line<'
     lines.push(Line::from(spans));
 
     let authors = item.content.authors();
-    let mut meta: Vec<Span> = vec![Span::raw("      ")];
     if !authors.is_empty() {
-        meta.push(authors.join(", ").italic().dark_gray());
+        lines.push(Line::from(vec![Span::raw("      "), authors.join(", ").italic().dark_gray()]));
     }
-    let mins = item.read_time_secs as u32 / 60;
-    if mins > 0 {
-        if !authors.is_empty() { meta.push("  \u{00B7}  ".dark_gray()); }
-        meta.push(format!("{mins} min").dark_gray());
-    }
-    lines.push(Line::from(meta));
+    lines.push(Line::from(""));
 }
 
 // ── Article ──
 
-fn draw_article(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_article(frame: &mut Frame, app: &mut App, area: Rect) {
     match &app.article {
         LoadingState::Loading => { frame.render_widget(Paragraph::new("Loading...").centered().fg(DIM), area); return; }
         LoadingState::Error(e) => { frame.render_widget(Paragraph::new(format!("Error: {e}")).centered().fg(Color::Red), area); return; }
         LoadingState::Loaded(_) => {}
     }
 
+    // Rebuild lines if width changed
+    if app.article_built_width != area.width {
+        app.build_article_lines(area.width);
+        app.article_dirty = true;
+    }
+
     let [_, content, _] = Layout::horizontal([
         Constraint::Fill(1), Constraint::Max(90), Constraint::Fill(1),
     ]).areas(area);
 
-    let lines: Vec<Line> = app.article_lines.iter().map(|al| match al {
-        ArticleLine::Title(t) => Line::from(format!("  {t}").bold()),
-        ArticleLine::Header(t) => Line::from(vec![Span::raw("  "), dot_span(DIM), t.to_string().bold()]),
-        ArticleLine::Author(t) => Line::from(format!("  {t}").italic()),
-        ArticleLine::Meta(t) => Line::from(format!("  {t}").dark_gray()),
-        ArticleLine::Heading(t) => Line::from(Span::styled(format!("  {t}"), Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
-        ArticleLine::RichText(segs) => {
-            let mut spans = vec![Span::raw("  ")];
-            spans.extend(markdown::segments_to_spans(segs));
-            Line::from(spans)
-        }
-        ArticleLine::ImageCaption(t) => Line::from(format!("  {t}").italic().dark_gray()),
-        ArticleLine::Blank => Line::from(""),
-    }).collect();
+    // Rebuild offscreen buffer when dirty (same pattern as home page)
+    if app.article_dirty {
+        let mut lines: Vec<Line> = Vec::new();
+        let mut image_placements: Vec<(u16, String, u16)> = Vec::new();
+        let img_w = content.width.saturating_sub(4);
 
-    let total = lines.len();
-    frame.render_widget(Paragraph::new(lines).scroll((app.article_scroll, 0)), content);
+        for al in &app.article_lines {
+            match al {
+                ArticleLine::Title(t) => lines.push(Line::from(format!("  {t}").bold())),
+                ArticleLine::Header(t, color) => {
+                    let c = color.map(|(r,g,b)| Color::Rgb(r,g,b)).unwrap_or(DIM);
+                    lines.push(Line::from(vec![Span::raw("  "), dot_span(c), t.to_string().bold()]));
+                }
+                ArticleLine::Author(t) => lines.push(Line::from(format!("  {t}").italic())),
+                ArticleLine::Meta(t) => lines.push(Line::from(format!("  {t}").dark_gray())),
+                ArticleLine::Heading(t) => lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(t.to_string(), Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+                ])),
+                ArticleLine::RichText(segs) => {
+                    let mut spans = vec![Span::raw("  ")];
+                    spans.extend(markdown::segments_to_spans(segs));
+                    lines.push(Line::from(spans));
+                }
+                ArticleLine::InlineImage { url, height } => {
+                    let mut h = *height;
+                    // Resolve from actual image if height unknown
+                    if h == 0 {
+                        if let Some(cache) = &app.image_cache {
+                            if let Some(cached) = cache.images.get(url.as_str()) {
+                                let (sw, sh) = (cached.source.width(), cached.source.height());
+                                if sw > 0 {
+                                    h = ((img_w as f64 * sh as f64 / sw as f64) / 2.0).round() as u16;
+                                    h = h.max(3).min(50);
+                                }
+                            }
+                        }
+                        if h == 0 { h = 25; }
+                    }
+                    image_placements.push((lines.len() as u16, url.clone(), h));
+                    for _ in 0..h { lines.push(Line::from("")); }
+                }
+                ArticleLine::ImageCaption(t) => lines.push(Line::from(format!("  {t}").italic().dark_gray())),
+                ArticleLine::Blank => lines.push(Line::from("")),
+            }
+        }
+
+        let total_h = lines.len() as u16;
+        let buf_area = Rect { x: 0, y: 0, width: content.width, height: total_h.max(1) };
+        let mut offscreen = Buffer::empty(buf_area);
+
+        // Render text into offscreen buffer
+        Paragraph::new(lines).render(buf_area, &mut offscreen);
+
+        // Render images into offscreen buffer (same as home page tiles)
+        let mut image_cache = app.image_cache.take();
+        for (line_y, url, img_h) in &image_placements {
+            let img_rect = Rect { x: 2, y: *line_y, width: img_w, height: *img_h };
+            if let Some(cache) = &mut image_cache {
+                if !cache.images.contains_key(url.as_str()) {
+                    cache.fetch(url);
+                }
+                // Use get_cover with halfblocks font (1,2) for correct aspect ratio
+                if let Some(proto) = cache.get_cover(url, img_w, *img_h) {
+                    StatefulImage::new().resize(Resize::Fit(None)).render(img_rect, &mut offscreen, proto);
+                }
+            }
+        }
+        app.image_cache = image_cache;
+
+        app.article_buffer = Some(offscreen);
+        app.article_dirty = false;
+    }
+
+    // Splice visible region from cached buffer (same as home page)
+    let scroll = app.article_scroll;
+    let total;
+    if let Some(offscreen) = &app.article_buffer {
+        total = offscreen.area.height as usize;
+        let frame_buf = frame.buffer_mut();
+        for fy in 0..content.height {
+            let src_y = fy + scroll;
+            if src_y >= offscreen.area.height { break; }
+            for fx in 0..content.width.min(offscreen.area.width) {
+                frame_buf[(content.x + fx, content.y + fy)] = offscreen[(fx, src_y)].clone();
+            }
+        }
+    } else {
+        total = 0;
+    }
 
     if total > area.height as usize {
         let mut sb = ScrollbarState::new(total)
-            .position(app.article_scroll as usize)
+            .position(scroll as usize)
             .viewport_content_length(area.height as usize);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight).style(Style::default().fg(DIM)),
