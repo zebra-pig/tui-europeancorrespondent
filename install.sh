@@ -53,4 +53,6 @@ echo ""
 echo "Running..."
 echo ""
 
-exec "$BIN_PATH" "$@"
+# Redirect stdin from /dev/tty so the TUI can read keyboard input
+# (when run via curl | sh, stdin is the pipe, not the terminal)
+exec "$BIN_PATH" "$@" </dev/tty
