@@ -491,6 +491,7 @@ macro_rules! convert_summary_content_impl {
     };
 }
 
+convert_summary_content_impl!(fetch_latest_edition, convert_edition_content);
 convert_summary_content_impl!(fetch_homepage, convert_homepage_content);
 // Search uses SearchItemSummary (simplified, no cardColor/topImage/etc.)
 fn convert_search_content(c: search_articles::SearchArticlesEditionItemsNodesContent) -> ItemContent {
