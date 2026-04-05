@@ -80,10 +80,8 @@ impl ImageCache {
         let cached = self.images.get_mut(url)?;
 
         if cached.cover_proto.is_none() || cached.cover_size != (w, h) {
-            let render_w = w.saturating_sub(1).max(1);
-            let render_h = h.saturating_sub(1).max(1);
-            let px_w = (render_w as u32) * (font.0 as u32);
-            let px_h = (render_h as u32) * (font.1 as u32);
+            let px_w = (w as u32) * (font.0 as u32);
+            let px_h = (h as u32) * (font.1 as u32);
             if px_w == 0 || px_h == 0 { return None; }
 
             let covered = cached.source.resize_to_fill(

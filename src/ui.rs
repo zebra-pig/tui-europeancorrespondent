@@ -110,14 +110,21 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
 
     // Phase 1: measure total height and track item offsets + heights
     let hero_h = (area.height * 63 / 100).max(20);
-    let mut total_h: u16 = 1;
+    let mut total_h: u16 = 0;
     let mut item_idx: usize = 0;
     let mut item_offsets: Vec<u16> = Vec::new();
     let mut item_heights: Vec<u16> = Vec::new();
     let mut section_layouts: Vec<SectionLayout> = Vec::new();
     let mut color_idx: usize = 0;
+    let mut prev_was_highlight = false;
 
-    for section in &homepage.sections {
+    for (section_idx, section) in homepage.sections.iter().enumerate() {
+        // Add gap before non-highlight sections (highlights sit flush against each other)
+        let is_highlight = matches!(section, HomepageSection::Highlight { .. });
+        if !is_highlight || !prev_was_highlight {
+            total_h += 1; // gap
+        }
+
         match section {
             HomepageSection::Hero { items } => {
                 let y = total_h;
@@ -125,9 +132,9 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 for (i, _) in items.iter().enumerate() {
                     let (offset, height) = if w >= 96 && items.len() >= 5 {
                         match i {
-                            0 => (y, hero_h),          // center: full height
-                            1 | 2 => (y, half),        // top row
-                            3 | 4 => (y + half, hero_h - half), // bottom row
+                            0 => (y, hero_h),
+                            1 | 2 => (y, half),
+                            3 | 4 => (y + half, hero_h - half),
                             _ => (y, hero_h),
                         }
                     } else {
@@ -139,7 +146,8 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                     item_idx += 1;
                 }
                 section_layouts.push(SectionLayout::Hero { y, height: hero_h, count: items.len() });
-                total_h += hero_h + 1;
+                total_h += hero_h;
+                prev_was_highlight = false;
             }
             HomepageSection::ItemList { heading, subheading, header_color, items } => {
                 let dc = header_color.accent_rgb()
@@ -157,7 +165,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 }
                 for item in items {
                     item_offsets.push(total_h + lines.len() as u16);
-                    item_heights.push(3); // compact: title + authors + blank
+                    item_heights.push(3);
                     build_compact_item(item, false, &mut lines);
                     item_idx += 1;
                 }
@@ -166,6 +174,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 let h = lines.len() as u16;
                 section_layouts.push(SectionLayout::Text { y: total_h, lines });
                 total_h += h;
+                prev_was_highlight = false;
             }
             HomepageSection::Highlight { item } => {
                 let highlight_h = (area.height * 47 / 100).max(14);
@@ -175,10 +184,11 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                     y: total_h,
                     height: highlight_h,
                     item_index: item_idx,
-                    reversed: color_idx % 2 == 1, // alternate image side
+                    reversed: section_idx % 2 == 1, // odd section index = swap layout
                 });
                 item_idx += 1;
-                total_h += highlight_h + 1;
+                total_h += highlight_h;
+                prev_was_highlight = true;
             }
             HomepageSection::Inline { item } => {
                 let mut lines = Vec::new();
@@ -189,6 +199,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 let h = lines.len() as u16;
                 section_layouts.push(SectionLayout::Text { y: total_h, lines });
                 total_h += h;
+                prev_was_highlight = false;
             }
         }
     }
@@ -280,8 +291,9 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 let sy = vy as i32 - scroll as i32;
                 if sy >= 0 && (sy as u16) < area.height && vx < area.width {
                     if let Some(cell) = buf.cell_mut((area.x + vx, area.y + sy as u16)) {
+                        // Keep the existing background, just change the symbol and make fg visible
                         cell.set_symbol(sym);
-                        cell.set_style(Style::reset());
+                        cell.set_fg(Color::Reset);
                     }
                 }
             };
@@ -557,7 +569,7 @@ fn render_highlight(
     let rendered = item.content.image_url().map_or(false, |url| {
         image_cache.as_mut().map_or(false, |cache| {
             cache.get_cover(url, img_col.width, img_col.height).map_or(false, |proto| {
-                StatefulImage::new().resize(Resize::Fit(None)).render(img_col, buf, proto);
+                StatefulImage::new().resize(Resize::Scale(None)).render(img_col, buf, proto);
                 true
             })
         })
@@ -587,15 +599,19 @@ fn render_highlight(
             .iter().take(3).map(|l| l.to_string()).collect()
     }).unwrap_or_default();
 
-    let text_h = title_wrapped.len() + 1 + teaser_wrapped.len();
-    let pad_top = text_col.height.saturating_sub(text_h as u16) / 2;
+    let text_h = (title_wrapped.len() + if teaser_wrapped.is_empty() { 0 } else { 1 + teaser_wrapped.len() }) as u16;
 
-    let text_area = Rect {
+    // Vertically center using Layout with spacers
+    let [_, text_area, _] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(text_h),
+        Constraint::Fill(1),
+    ]).areas(Rect {
         x: text_col.x + 2,
-        y: text_col.y + pad_top,
+        y: text_col.y,
         width: text_col.width.saturating_sub(4),
-        height: text_col.height.saturating_sub(pad_top),
-    };
+        height: text_col.height,
+    });
 
     let mut lines: Vec<Line> = Vec::new();
     let title_style = Style::default().add_modifier(Modifier::BOLD)
