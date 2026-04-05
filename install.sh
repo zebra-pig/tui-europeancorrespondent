@@ -1,9 +1,9 @@
 #!/bin/sh
 # Install and run The European Correspondent TUI
-# Usage: curl -fsSL https://raw.githubusercontent.com/leonceaklin/tui-europeancorrespondent/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/zebra-pig/tui-europeancorrespondent/main/install.sh | sh
 set -e
 
-REPO="leonceaklin/tui-europeancorrespondent"
+REPO="zebra-pig/tui-europeancorrespondent"
 BINARY="tui-europeancorrespondent"
 INSTALL_DIR="${TMPDIR:-/tmp}/european-correspondent"
 

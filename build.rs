@@ -9,5 +9,11 @@ fn main() {
             }
         }
     }
+
+    // Also forward EC_API_KEY from environment (for CI builds)
+    if let Ok(key) = std::env::var("EC_API_KEY") {
+        println!("cargo:rustc-env=EC_API_KEY={}", key);
+    }
+
     println!("cargo:rerun-if-changed=.env");
 }

@@ -50,8 +50,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // API key: baked in from .env at compile time, overridable at runtime
     let api_key = std::env::var("EC_API_KEY").ok()
         .or_else(|| {
-            let key = env!("EC_API_KEY");
-            if key.is_empty() || key == "your-api-key-here" { None } else { Some(key.to_string()) }
+            option_env!("EC_API_KEY")
+                .filter(|k| !k.is_empty() && *k != "your-api-key-here")
+                .map(|k| k.to_string())
         });
     let client = Arc::new(api::ApiClient::new(api_key));
 

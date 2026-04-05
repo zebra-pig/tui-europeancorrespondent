@@ -1,7 +1,7 @@
 # Install and run The European Correspondent TUI (Windows)
-# Usage: irm https://raw.githubusercontent.com/leonceaklin/tui-europeancorrespondent/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/zebra-pig/tui-europeancorrespondent/main/install.ps1 | iex
 
-$repo = "leonceaklin/tui-europeancorrespondent"
+$repo = "zebra-pig/tui-europeancorrespondent"
 $binary = "tui-europeancorrespondent"
 
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture -eq "Arm64") { "aarch64" } else { "x86_64" }
