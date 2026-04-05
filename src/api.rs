@@ -4,9 +4,10 @@ use reqwest::Client;
 const API_URL: &str = "https://api.europeancorrespondent.com/graphql";
 
 type Locale = String;
-type Float = f64;
-type ID = String;
+#[allow(dead_code)] type Float = f64;
+#[allow(dead_code)] type ID = String;
 
+#[allow(dead_code)]
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "schema.json",
@@ -68,8 +69,8 @@ pub struct DynColor {
     pub dark: Option<(u8, u8, u8)>,
 }
 
+#[allow(dead_code)]
 impl DynColor {
-    /// Returns the light-mode color (used for foreground/accents on any background)
     pub fn rgb(&self) -> Option<(u8, u8, u8)> {
         self.light.or(self.dark)
     }
@@ -100,6 +101,7 @@ fn parse_hex(hex: &Option<String>) -> Option<(u8, u8, u8)> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct EditionItem {
     pub title: Option<String>,
     pub slug: Option<String>,
@@ -111,6 +113,7 @@ pub struct EditionItem {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ItemContent {
     Longform {
         title: String,
@@ -175,6 +178,7 @@ pub enum ItemContent {
     },
 }
 
+#[allow(dead_code)]
 impl ItemContent {
     pub fn type_label(&self) -> &'static str {
         match self {
@@ -487,7 +491,6 @@ macro_rules! convert_summary_content_impl {
     };
 }
 
-convert_summary_content_impl!(fetch_latest_edition, convert_edition_content);
 convert_summary_content_impl!(fetch_homepage, convert_homepage_content);
 // Search uses SearchItemSummary (simplified, no cardColor/topImage/etc.)
 fn convert_search_content(c: search_articles::SearchArticlesEditionItemsNodesContent) -> ItemContent {
@@ -646,6 +649,7 @@ fn convert_edition_by_date_content(c: fetch_edition_by_date::FetchEditionByDateE
     }
 }
 
+#[allow(dead_code)]
 fn convert_edition_item(item: fetch_latest_edition::EditionItemSummary) -> EditionItem {
     EditionItem {
         title: item.title, slug: item.slug, date: item.date,
@@ -785,6 +789,7 @@ impl ApiClient {
         Ok(Homepage { sections })
     }
 
+    #[allow(dead_code)]
     pub async fn fetch_latest_edition(&self, locale: &str) -> Result<Edition, String> {
         let data = self.gql::<FetchLatestEdition>(fetch_latest_edition::Variables {
             locale: Some(locale.to_string()),
@@ -806,6 +811,7 @@ impl ApiClient {
         })
     }
 
+    #[allow(dead_code)]
     pub async fn fetch_editions_list(&self, locale: &str) -> Result<Vec<Edition>, String> {
         let data = self.gql::<FetchLatestEdition>(fetch_latest_edition::Variables {
             locale: Some(locale.to_string()),

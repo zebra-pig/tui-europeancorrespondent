@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use tokio::sync::mpsc;
 
+#[allow(dead_code)]
 pub struct CachedImage {
     pub source: DynamicImage,
     /// Cover protocol: pre-cropped to fill a specific (w, h) cell size
@@ -53,6 +54,7 @@ impl ImageCache {
 
     /// Get protocol for inline article images. Uses the original source image
     /// and relies on StatefulImage with Resize::Scale to handle sizing at render time.
+    #[allow(dead_code, deprecated)]
     pub fn get_scalable(&mut self, url: &str) -> Option<&mut StatefulProtocol> {
         let proto_type = self.proto_type;
 
@@ -73,6 +75,7 @@ impl ImageCache {
     }
 
     /// Get protocol for Cover rendering (cropped to fill w x h cells).
+    #[allow(deprecated)]
     pub fn get_cover(&mut self, url: &str, w: u16, h: u16) -> Option<&mut StatefulProtocol> {
         let font = self.font_size;
         let proto_type = self.proto_type;

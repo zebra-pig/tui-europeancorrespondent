@@ -1,6 +1,4 @@
 use chrono::NaiveDate;
-use ratatui::widgets::ListState;
-
 use crate::api::{ContentBlock, Edition, EditionItem, Homepage, HomepageSection, ItemContent};
 use crate::images::ImageCache;
 use crate::markdown::{self, StyledSegment};
@@ -96,14 +94,6 @@ pub struct App {
 
     pub image_cache: Option<ImageCache>,
     pub cell_aspect: f64,
-}
-
-pub struct ImagePlacement {
-    pub url: String,
-    pub line_offset: u16,
-    pub x_offset: u16,
-    pub width: u16,
-    pub height: u16,
 }
 
 #[derive(Clone)]
@@ -319,7 +309,7 @@ fn compute_image_height(display_width_chars: usize, img_w: Option<i64>, img_h: O
     }
 }
 
-fn render_content_blocks(blocks: &[ContentBlock], wrap_width: usize, cell_aspect: f64, lines: &mut Vec<ArticleLine>) {
+fn render_content_blocks(blocks: &[ContentBlock], wrap_width: usize, _cell_aspect: f64, lines: &mut Vec<ArticleLine>) {
     for block in blocks {
         match block {
             ContentBlock::Heading(text) => {

@@ -18,6 +18,7 @@ use std::io::stdout;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+#[allow(dead_code)]
 enum AsyncMsg {
     HomepageLoaded(Result<api::Homepage, String>),
     ArticleLoaded(Result<api::EditionItem, String>),
@@ -46,6 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = crossterm::terminal::disable_raw_mode();
             let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
             // Use halfblocks fallback
+            #[allow(deprecated)]
             Some(Picker::from_fontsize((8, 16)))
         }
     };
@@ -68,6 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Image cache + font metrics
     // Use halfblocks fallback if picker detection failed
+    #[allow(deprecated)]
     let picker = picker.or_else(|| Some(Picker::from_fontsize((8, 16))));
     if let Some(ref p) = picker {
         let fs = p.font_size();

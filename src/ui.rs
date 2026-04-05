@@ -4,7 +4,7 @@ use ratatui::{
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{
-        Block, BorderType, Borders, Clear, Paragraph,
+        Block, BorderType, Clear, Paragraph,
         Scrollbar, ScrollbarOrientation, ScrollbarState, StatefulWidget, Widget,
     },
     Frame,
@@ -178,7 +178,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 total_h += h;
                 prev_was_highlight = false;
             }
-            HomepageSection::Highlight { item } => {
+            HomepageSection::Highlight { item: _ } => {
                 let highlight_h = (area.height * 47 / 100).max(14);
                 item_offsets.push(total_h);
                 item_heights.push(highlight_h);
@@ -420,7 +420,7 @@ fn render_hero_grid(
 /// Always bordered (border style changes on focus, not presence → image doesn't resize).
 /// Primary items show teaser text below the title.
 /// Images use Crop to fill the space (like CSS object-cover).
-fn render_tile_buf(buf: &mut Buffer, image_cache: &mut Option<crate::images::ImageCache>, item: &EditionItem, area: Rect, focused: bool, primary: bool) {
+fn render_tile_buf(buf: &mut Buffer, image_cache: &mut Option<crate::images::ImageCache>, item: &EditionItem, area: Rect, _focused: bool, primary: bool) {
     if area.width < 4 || area.height < 3 { return; }
 
     let title = item.title.as_deref().unwrap_or("Untitled");
@@ -629,41 +629,6 @@ fn render_highlight(
 }
 
 // ── Compact/hero item builders ──
-
-fn build_hero_item(item: &EditionItem, width: usize, selected: bool, lines: &mut Vec<Line<'static>>) {
-    let wrap = width.saturating_sub(8).min(90);
-    let hdr_color = item.content.header_color()
-        .and_then(|c| c.accent_rgb())
-        .map(|(r,g,b)| Color::Rgb(r,g,b))
-        .unwrap_or(DIM);
-    let header_text = item.content.header().unwrap_or(item.content.type_label());
-    let title = item.title.as_deref().unwrap_or("Untitled");
-    let teaser = markdown::segments_to_plain(&markdown::parse_md(
-        item.content.teaser().unwrap_or(&item.preview_text),
-    ));
-    let sel = if selected { "\u{25B8} " } else { "  " };
-
-    lines.push(Line::from(vec![
-        Span::raw("  "), Span::raw(sel), dot_span(hdr_color),
-        Span::styled(header_text.to_string(), Style::default().fg(hdr_color)),
-    ]));
-    for l in textwrap::wrap(title, wrap) {
-        lines.push(Line::from(vec![Span::raw("    "), l.to_string().bold()]));
-    }
-    if let Some((label, lc)) = item.content.label_info() {
-        let c = lc.light.map(|(r,g,b)| Color::Rgb(r,g,b)).unwrap_or(Color::Red);
-        lines.push(Line::from(vec![Span::raw("    "), label_span(label, c)]));
-    }
-    let authors = item.content.authors();
-    if !authors.is_empty() {
-        lines.push(Line::from(vec![Span::raw("    "), authors.join(", ").italic()]));
-    }
-    if !teaser.is_empty() {
-        for l in textwrap::wrap(&teaser.chars().take(250).collect::<String>(), wrap) {
-            lines.push(Line::from(vec![Span::raw("    "), l.to_string().dark_gray()]));
-        }
-    }
-}
 
 fn build_compact_item(item: &EditionItem, selected: bool, lines: &mut Vec<Line<'static>>) {
     let sel = if selected { "\u{25B8} " } else { "  " };
