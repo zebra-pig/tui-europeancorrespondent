@@ -1,0 +1,66 @@
+query SearchArticles($filter: EditionItemFilter, $locale: Locale) {
+    editionItems(filter: $filter, locale: $locale, first: 20) {
+        nodes {
+            id
+            title
+            slug
+            date
+            previewText
+            wordCount
+            expectedReadTimeSeconds
+            contentType
+            content {
+                __typename
+                ... on Longform {
+                    type
+                    longformTitle: title
+                    header
+                    headerColor { light dark }
+                    teaser
+                    authors { firstName lastName }
+                }
+                ... on Feature {
+                    type
+                    featureTitle: title
+                    header
+                    headerColor { light dark }
+                    label
+                    labelColor { light dark }
+                    authors { firstName lastName }
+                    countryCodes
+                }
+                ... on DataVisualisation {
+                    type
+                    dvTitle: title
+                    header
+                    headerColor { light dark }
+                    label
+                    labelColor { light dark }
+                    authors { firstName lastName }
+                }
+                ... on CulturalRecommendation {
+                    type
+                    crTitle: title
+                    header
+                    headerColor { light dark }
+                    authors { firstName lastName }
+                }
+                ... on EditorsNote {
+                    type
+                    authors { firstName lastName }
+                }
+                ... on CommunityNote {
+                    type
+                    cnTitle: title
+                    label
+                    signature
+                    authors { firstName lastName }
+                }
+                ... on Advert {
+                    type
+                    adTitle: title
+                }
+            }
+        }
+    }
+}

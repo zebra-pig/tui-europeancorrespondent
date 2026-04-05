@@ -69,13 +69,6 @@ query FetchArticle($slug: String, $locale: Locale) {
     }
 }
 
-query SearchArticles($filter: EditionItemFilter, $locale: Locale) {
-    editionItems(filter: $filter, locale: $locale, first: 20) {
-        nodes {
-            ...EditionItemSummary
-        }
-    }
-}
 
 fragment EditionItemSummary on EditionItem {
     id
@@ -392,3 +385,4 @@ fragment ContentBlockFields on ContentBlock {
         }
     }
 }
+

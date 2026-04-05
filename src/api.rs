@@ -37,11 +37,20 @@ pub struct FetchArticle;
 #[derive(GraphQLQuery)]
 #[graphql(
     schema_path = "schema.json",
-    query_path = "src/graphql/queries.graphql",
+    query_path = "src/graphql/search.graphql",
     response_derives = "Debug, Clone",
     variables_derives = "Debug"
 )]
 pub struct SearchArticles;
+
+#[derive(GraphQLQuery)]
+#[graphql(
+    schema_path = "schema.json",
+    query_path = "src/graphql/edition.graphql",
+    response_derives = "Debug, Clone",
+    variables_derives = "Debug"
+)]
+pub struct FetchEditionByDate;
 
 // ── Domain models ──
 
@@ -349,12 +358,12 @@ impl_has_name!(fetch_article::EditionItemFullContentOnCulturalRecommendationAuth
 impl_has_name!(fetch_article::EditionItemFullContentOnEditorsNoteAuthors);
 impl_has_name!(fetch_article::EditionItemFullContentOnCommunityNoteAuthors);
 
-impl_has_name!(search_articles::EditionItemSummaryContentOnLongformAuthors);
-impl_has_name!(search_articles::EditionItemSummaryContentOnFeatureAuthors);
-impl_has_name!(search_articles::EditionItemSummaryContentOnDataVisualisationAuthors);
-impl_has_name!(search_articles::EditionItemSummaryContentOnCulturalRecommendationAuthors);
-impl_has_name!(search_articles::EditionItemSummaryContentOnEditorsNoteAuthors);
-impl_has_name!(search_articles::EditionItemSummaryContentOnCommunityNoteAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnLongformAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnFeatureAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnDataVisualisationAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnCulturalRecommendationAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnEditorsNoteAuthors);
+impl_has_name!(search_articles::SearchArticlesEditionItemsNodesContentOnCommunityNoteAuthors);
 
 impl_has_name!(fetch_homepage::EditionItemSummaryContentOnLongformAuthors);
 impl_has_name!(fetch_homepage::EditionItemSummaryContentOnFeatureAuthors);
@@ -377,7 +386,27 @@ macro_rules! impl_summary_colors {
     };
 }
 impl_summary_colors!(fetch_latest_edition);
-impl_summary_colors!(search_articles);
+// FetchEditionByDate types
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnLongformAuthors);
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnFeatureAuthors);
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnDataVisualisationAuthors);
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnCulturalRecommendationAuthors);
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnEditorsNoteAuthors);
+impl_has_name!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnCommunityNoteAuthors);
+
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnLongformHeaderColor);
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnFeatureHeaderColor);
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnFeatureLabelColor);
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnDataVisualisationHeaderColor);
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnDataVisualisationLabelColor);
+impl_has_color!(fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContentOnCulturalRecommendationHeaderColor);
+
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnLongformHeaderColor);
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnFeatureHeaderColor);
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnFeatureLabelColor);
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnDataVisualisationHeaderColor);
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnDataVisualisationLabelColor);
+impl_has_color!(search_articles::SearchArticlesEditionItemsNodesContentOnCulturalRecommendationHeaderColor);
 impl_summary_colors!(fetch_homepage);
 
 impl_has_color!(fetch_article::EditionItemFullContentOnLongformHeaderColor);
@@ -460,7 +489,45 @@ macro_rules! convert_summary_content_impl {
 
 convert_summary_content_impl!(fetch_latest_edition, convert_edition_content);
 convert_summary_content_impl!(fetch_homepage, convert_homepage_content);
-convert_summary_content_impl!(search_articles, convert_search_content);
+// Search uses SearchItemSummary (simplified, no cardColor/topImage/etc.)
+fn convert_search_content(c: search_articles::SearchArticlesEditionItemsNodesContent) -> ItemContent {
+    use search_articles::SearchArticlesEditionItemsNodesContent::*;
+    match c {
+        Longform(l) => ItemContent::Longform {
+            title: l.longform_title, header: l.header, teaser: l.teaser,
+            header_color: opt_color(&l.header_color),
+            card_color: DynColor { light: None, dark: None },
+            title_color: DynColor { light: None, dark: None },
+            image_url: None,
+            authors: author_names(&l.authors),
+            introduction_comment: vec![], body: vec![], comment: vec![],
+        },
+        Feature(f) => ItemContent::Feature {
+            title: f.feature_title, header: f.header, label: f.label,
+            header_color: opt_color(&f.header_color), label_color: opt_color(&f.label_color),
+            image_url: None,
+            authors: author_names(&f.authors), country_codes: f.country_codes,
+            introduction_comment: vec![], lead: vec![], comment: vec![],
+        },
+        DataVisualisation(d) => ItemContent::DataVis {
+            title: d.dv_title, header: d.header, label: d.label,
+            header_color: opt_color(&d.header_color), label_color: opt_color(&d.label_color),
+            image_url: None, image_width: None, image_height: None,
+            authors: author_names(&d.authors), description: vec![],
+        },
+        CulturalRecommendation(c) => ItemContent::CulturalRec {
+            title: c.cr_title, header: c.header, header_color: opt_color(&c.header_color),
+            image_url: None,
+            authors: author_names(&c.authors), description: vec![],
+        },
+        EditorsNote(e) => ItemContent::EditorsNote { authors: author_names(&e.authors), body: vec![] },
+        CommunityNote(c) => ItemContent::CommunityNote {
+            title: c.cn_title, label: c.label, signature: c.signature,
+            authors: author_names(&c.authors), description_top: vec![], description_bottom: vec![],
+        },
+        Advert(a) => ItemContent::Advert { title: a.ad_title },
+    }
+}
 
 fn convert_full_content(c: fetch_article::EditionItemFullContent) -> ItemContent {
     use fetch_article::EditionItemFullContent::*;
@@ -512,6 +579,73 @@ fn convert_full_content(c: fetch_article::EditionItemFullContent) -> ItemContent
     }
 }
 
+fn convert_edition_blocks(blocks: &[fetch_edition_by_date::EditionContentBlock]) -> Vec<ContentBlock> {
+    blocks.iter().map(|b| match b {
+        fetch_edition_by_date::EditionContentBlock::ParagraphContentBlock(p) => {
+            ContentBlock::Paragraph(p.text.clone())
+        }
+        fetch_edition_by_date::EditionContentBlock::HeadingContentBlock(h) => {
+            ContentBlock::Heading(h.text.clone())
+        }
+        fetch_edition_by_date::EditionContentBlock::ImageContentBlock(i) => {
+            ContentBlock::Image {
+                url: Some(i.image.url.clone()),
+                width: i.image.width,
+                height: i.image.height,
+                caption: i.image.caption.clone(),
+                alt: i.image.alt.clone(),
+            }
+        }
+    }).collect()
+}
+
+fn convert_edition_by_date_content(c: fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContent) -> ItemContent {
+    use fetch_edition_by_date::FetchEditionByDateEditionsNodesItemsContent::*;
+    match c {
+        Longform(l) => ItemContent::Longform {
+            title: l.longform_title, header: l.header, teaser: l.teaser,
+            header_color: opt_color(&l.header_color),
+            card_color: DynColor { light: None, dark: None },
+            title_color: DynColor { light: None, dark: None },
+            image_url: None, authors: author_names(&l.authors),
+            introduction_comment: l.introduction_comment.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+            body: convert_edition_blocks(&l.content),
+            comment: vec![],
+        },
+        Feature(f) => ItemContent::Feature {
+            title: f.feature_title, header: f.header, label: f.label,
+            header_color: opt_color(&f.header_color), label_color: opt_color(&f.label_color),
+            image_url: None, authors: author_names(&f.authors), country_codes: f.country_codes,
+            introduction_comment: f.introduction_comment.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+            lead: f.lead.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+            comment: vec![],
+        },
+        DataVisualisation(d) => ItemContent::DataVis {
+            title: d.dv_title, header: d.header, label: d.label,
+            header_color: opt_color(&d.header_color), label_color: opt_color(&d.label_color),
+            image_url: None, image_width: None, image_height: None,
+            authors: author_names(&d.authors),
+            description: d.description.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+        },
+        CulturalRecommendation(c) => ItemContent::CulturalRec {
+            title: c.cr_title, header: c.header, header_color: opt_color(&c.header_color),
+            image_url: None, authors: author_names(&c.authors),
+            description: c.description.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+        },
+        EditorsNote(e) => ItemContent::EditorsNote {
+            authors: author_names(&e.authors),
+            body: convert_edition_blocks(&e.content),
+        },
+        CommunityNote(c) => ItemContent::CommunityNote {
+            title: c.cn_title, label: c.label, signature: c.signature,
+            authors: author_names(&c.authors),
+            description_top: c.description_top.as_ref().map(|b| convert_edition_blocks(b)).unwrap_or_default(),
+            description_bottom: vec![],
+        },
+        Advert(a) => ItemContent::Advert { title: a.ad_title },
+    }
+}
+
 fn convert_edition_item(item: fetch_latest_edition::EditionItemSummary) -> EditionItem {
     EditionItem {
         title: item.title, slug: item.slug, date: item.date,
@@ -530,7 +664,7 @@ fn convert_homepage_item(item: fetch_homepage::EditionItemSummary) -> EditionIte
     }
 }
 
-fn convert_search_item(item: search_articles::EditionItemSummary) -> EditionItem {
+fn convert_search_item(item: search_articles::SearchArticlesEditionItemsNodes) -> EditionItem {
     EditionItem {
         title: item.title, slug: item.slug, date: item.date,
         preview_text: item.preview_text, word_count: item.word_count,
@@ -540,6 +674,25 @@ fn convert_search_item(item: search_articles::EditionItemSummary) -> EditionItem
 }
 
 // ── API Client ──
+
+/// Recursively remove null values from JSON objects.
+/// GraphQL servers may reject explicit null for optional input fields.
+fn strip_nulls(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|_, v| !v.is_null());
+            for v in map.values_mut() {
+                strip_nulls(v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                strip_nulls(v);
+            }
+        }
+        _ => {}
+    }
+}
 
 pub struct ApiClient {
     client: Client,
@@ -554,13 +707,34 @@ impl ApiClient {
     async fn gql<Q: GraphQLQuery>(&self, vars: Q::Variables) -> Result<Q::ResponseData, String>
     where Q::Variables: serde::Serialize, Q::ResponseData: serde::de::DeserializeOwned {
         let body = Q::build_query(vars);
-        let mut req = self.client.post(API_URL).json(&body);
+        // Serialize and strip null values - some GraphQL servers reject explicit null fields
+        let mut body_value = serde_json::to_value(&body).unwrap_or_default();
+        strip_nulls(&mut body_value);
+        let mut req = self.client.post(API_URL).json(&body_value);
         if let Some(key) = &self.api_key {
             req = req.header("x-api-key", key);
         }
-        let resp: graphql_client::Response<Q::ResponseData> = req.send().await
-            .map_err(|e| format!("Request failed: {}", e))?.json().await
-            .map_err(|e| format!("Parse failed: {}", e))?;
+        let raw_resp = req.send().await
+            .map_err(|e| format!("Request failed: {}", e))?;
+        let body = raw_resp.text().await
+            .map_err(|e| format!("Read failed: {}", e))?;
+        let resp: graphql_client::Response<Q::ResponseData> = match serde_json::from_str(&body) {
+            Ok(r) => r,
+            Err(e) => {
+                // Check if the body contains a GraphQL error (server returned null for non-null field)
+                if let Ok(raw) = serde_json::from_str::<serde_json::Value>(&body) {
+                    if let Some(errors) = raw.get("errors").and_then(|e| e.as_array()) {
+                        let msgs: Vec<String> = errors.iter()
+                            .filter_map(|e| e.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
+                            .collect();
+                        if !msgs.is_empty() {
+                            return Err(msgs.join(", "));
+                        }
+                    }
+                }
+                return Err(format!("Parse failed: {}", e));
+            }
+        };
         if let Some(errors) = &resp.errors {
             if !errors.is_empty() {
                 return Err(errors.iter().map(|e| e.message.as_str()).collect::<Vec<_>>().join(", "));
@@ -641,6 +815,23 @@ impl ApiClient {
         }).collect())
     }
 
+    pub async fn fetch_edition_by_date(&self, date: &str, locale: &str) -> Result<Option<Edition>, String> {
+        let data = self.gql::<FetchEditionByDate>(fetch_edition_by_date::Variables {
+            date: Some(date.to_string()), locale: Some(locale.to_string()),
+        }).await?;
+        Ok(data.editions.nodes.into_iter().next().map(|ed| Edition {
+            title: ed.title, date: ed.date,
+            items: ed.items.into_iter().map(|item| {
+                EditionItem {
+                    title: item.title, slug: item.slug, date: item.date,
+                    preview_text: item.preview_text, word_count: item.word_count,
+                    read_time_secs: item.expected_read_time_seconds,
+                    content: convert_edition_by_date_content(item.content),
+                }
+            }).collect(),
+        }))
+    }
+
     pub async fn search_articles(&self, query_text: &str, locale: &str) -> Result<Vec<EditionItem>, String> {
         let filter = search_articles::EditionItemFilter {
             plain_text: Some(search_articles::StringFilterField {
@@ -655,6 +846,13 @@ impl ApiClient {
         let data = self.gql::<SearchArticles>(search_articles::Variables {
             filter: Some(filter), locale: Some(locale.to_string()),
         }).await?;
-        Ok(data.edition_items.nodes.into_iter().map(convert_search_item).collect())
+        use search_articles::EditionItemContentType::*;
+        Ok(data.edition_items.nodes.into_iter()
+            .filter(|item| matches!(
+                item.content_type,
+                LONGFORM | FEATURE | DATA_VISUALISATION
+            ))
+            .map(convert_search_item)
+            .collect())
     }
 }

@@ -9,7 +9,8 @@ pub enum View {
     Home,
     Article,
     Search,
-    EditionsList,
+    DatePicker,
+    EditionView,
 }
 
 pub enum LoadingState<T> {
@@ -87,6 +88,12 @@ pub struct App {
     pub editions: LoadingState<Vec<Edition>>,
     pub editions_view: ScrollView,
 
+    // Date picker
+    pub picker_date: NaiveDate,
+    // Edition viewer
+    pub edition: LoadingState<Option<Edition>>,
+    pub edition_view: ScrollView,
+
     pub image_cache: Option<ImageCache>,
     pub cell_aspect: f64,
 }
@@ -137,6 +144,9 @@ impl App {
             search_active: false,
             editions: LoadingState::Loading,
             editions_view: ScrollView::new(),
+            picker_date: chrono::Local::now().date_naive(),
+            edition: LoadingState::Loading,
+            edition_view: ScrollView::new(),
             image_cache: None,
             cell_aspect: 0.5,
         }

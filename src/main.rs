@@ -5,6 +5,7 @@ mod markdown;
 mod ui;
 
 use app::{App, LoadingState, View};
+use chrono::NaiveDate;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -22,6 +23,7 @@ enum AsyncMsg {
     ArticleLoaded(Result<api::EditionItem, String>),
     SearchResults(Result<Vec<api::EditionItem>, String>),
     EditionsLoaded(Result<Vec<api::Edition>, String>),
+    EditionByDateLoaded(Result<Option<api::Edition>, String>),
     ImageLoaded(String, DynamicImage),
 }
 
@@ -150,6 +152,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     app.editions_view.selected = 0;
                     app.editions_view.scroll = 0;
                 }
+                AsyncMsg::EditionByDateLoaded(result) => {
+                    app.edition = match result {
+                        Ok(ed) => LoadingState::Loaded(ed),
+                        Err(e) => LoadingState::Error(e),
+                    };
+                    app.edition_view.selected = 0;
+                    app.edition_view.scroll = 0;
+                }
                 AsyncMsg::ImageLoaded(url, img) => {
                     if let Some(cache) = &mut app.image_cache {
                         cache.insert(url, img);
@@ -214,15 +224,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
                         KeyCode::Char('e') => {
-                            app.view = View::EditionsList;
-                            app.editions = LoadingState::Loading;
-                            let tx = tx.clone();
-                            let client = client.clone();
-                            let locale = app.locale.clone();
-                            tokio::spawn(async move {
-                                let result = client.fetch_editions_list(&locale).await;
-                                let _ = tx.send(AsyncMsg::EditionsLoaded(result));
-                            });
+                            app.picker_date = chrono::Local::now().date_naive();
+                            app.view = View::DatePicker;
                         }
                         _ => {}
                     },
@@ -271,10 +274,81 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         KeyCode::Esc | KeyCode::Backspace => { app.view = View::Home; }
                         _ => {}
                     },
-                    View::EditionsList => match key.code {
-                        KeyCode::Char('j') | KeyCode::Down => app.editions_view.next(),
-                        KeyCode::Char('k') | KeyCode::Up => app.editions_view.prev(),
-                        KeyCode::Enter => { app.view = View::Home; }
+                    View::DatePicker => {
+                        use chrono::Datelike;
+                        match key.code {
+                            KeyCode::Left => { app.picker_date = app.picker_date.pred_opt().unwrap_or(app.picker_date); }
+                            KeyCode::Right => {
+                                let today = chrono::Local::now().date_naive();
+                                let next = app.picker_date.succ_opt().unwrap_or(app.picker_date);
+                                if next <= today { app.picker_date = next; }
+                            }
+                            KeyCode::Up => { app.picker_date = app.picker_date - chrono::Duration::days(7); }
+                            KeyCode::Down => {
+                                let today = chrono::Local::now().date_naive();
+                                let next = app.picker_date + chrono::Duration::days(7);
+                                if next <= today { app.picker_date = next; } else { app.picker_date = today; }
+                            }
+                            KeyCode::Char('h') => {
+                                app.picker_date = NaiveDate::from_ymd_opt(
+                                    app.picker_date.year(), app.picker_date.month(), 1,
+                                ).and_then(|d| d.pred_opt()).unwrap_or(app.picker_date);
+                            }
+                            KeyCode::Char('l') => {
+                                let today = chrono::Local::now().date_naive();
+                                if let Some(next_month) = app.picker_date.with_day(28).and_then(|d| d.succ_opt()).and_then(|d| d.with_day(1)) {
+                                    if next_month <= today { app.picker_date = next_month; }
+                                }
+                            }
+                            KeyCode::Enter => {
+                                app.view = View::EditionView;
+                                app.edition = LoadingState::Loading;
+                                let tx = tx.clone();
+                                let client = client.clone();
+                                let locale = app.locale.clone();
+                                let date = app.picker_date.format("%Y-%m-%d").to_string();
+                                tokio::spawn(async move {
+                                    let result = client.fetch_edition_by_date(&date, &locale).await;
+                                    let _ = tx.send(AsyncMsg::EditionByDateLoaded(result));
+                                });
+                            }
+                            KeyCode::Esc | KeyCode::Backspace => { app.view = View::Home; }
+                            _ => {}
+                        }
+                    },
+                    View::EditionView => match key.code {
+                        KeyCode::Char('j') | KeyCode::Down => app.edition_view.next(),
+                        KeyCode::Char('k') | KeyCode::Up => app.edition_view.prev(),
+                        KeyCode::Enter => {
+                            if let LoadingState::Loaded(Some(ed)) = &app.edition {
+                                // Map visible index to actual item (skipping filtered types)
+                                let visible_items: Vec<&api::EditionItem> = ed.items.iter()
+                                    .filter(|item| !matches!(&item.content,
+                                        api::ItemContent::EditorsNote { .. }
+                                        | api::ItemContent::Advert { .. }
+                                        | api::ItemContent::CommunityNote { .. }))
+                                    .collect();
+                                let idx = app.edition_view.selected;
+                                if let Some(item) = visible_items.get(idx) {
+                                    if let Some(slug) = &item.slug {
+                                        app.view = View::Article;
+                                        app.article = LoadingState::Loading;
+                                        app.article_scroll = 0;
+                                        let tx = tx.clone();
+                                        let client = client.clone();
+                                        let locale = app.locale.clone();
+                                        let slug = slug.clone();
+                                        tokio::spawn(async move {
+                                            let result = client.fetch_article(&slug, &locale).await;
+                                            let _ = tx.send(AsyncMsg::ArticleLoaded(result));
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        KeyCode::Char('e') => {
+                            app.view = View::DatePicker;
+                        }
                         KeyCode::Esc | KeyCode::Backspace => { app.view = View::Home; }
                         _ => {}
                     },

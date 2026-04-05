@@ -177,12 +177,12 @@ impl StyledSegment {
 }
 
 /// Convert segments to ratatui Spans
-pub fn segments_to_spans(segments: &[StyledSegment]) -> Vec<Span<'_>> {
+pub fn segments_to_spans(segments: &[StyledSegment]) -> Vec<Span<'static>> {
     segments.iter().map(|seg| match seg {
-        StyledSegment::Plain(t) => Span::raw(t.as_str()),
-        StyledSegment::Bold(t) => Span::styled(t.as_str(), Style::default().add_modifier(Modifier::BOLD)),
-        StyledSegment::Italic(t) => Span::styled(t.as_str(), Style::default().add_modifier(Modifier::ITALIC)),
-        StyledSegment::Link(t) => Span::styled(t.as_str(), Style::default().add_modifier(Modifier::UNDERLINED)),
+        StyledSegment::Plain(t) => Span::raw(t.clone()),
+        StyledSegment::Bold(t) => Span::styled(t.clone(), Style::default().add_modifier(Modifier::BOLD)),
+        StyledSegment::Italic(t) => Span::styled(t.clone(), Style::default().add_modifier(Modifier::ITALIC)),
+        StyledSegment::Link(t) => Span::styled(t.clone(), Style::default().add_modifier(Modifier::UNDERLINED)),
     }).collect()
 }
 

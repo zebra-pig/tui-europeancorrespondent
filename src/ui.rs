@@ -72,14 +72,16 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         View::Home => draw_home(frame, app, content),
         View::Article => draw_article(frame, app, content),
         View::Search => draw_search(frame, app, content),
-        View::EditionsList => draw_editions(frame, app, content),
+        View::DatePicker => draw_date_picker(frame, app, content),
+        View::EditionView => draw_edition_view(frame, app, content),
     }
 
     let hints = match &app.view {
         View::Home => "\u{2191}\u{2193} Navigate  \u{23CE} Read  / Search  e Editions  q Quit",
         View::Article => "\u{2191}\u{2193} Scroll  Space Page  Esc Back  q Quit",
         View::Search => "\u{2191}\u{2193} Navigate  \u{23CE} Read  / Search  Esc Back",
-        View::EditionsList => "\u{2191}\u{2193} Navigate  \u{23CE} Open  Esc Back",
+        View::DatePicker => "\u{2190}\u{2192} Day  \u{2191}\u{2193} Week  h/l Month  \u{23CE} Load  Esc Back",
+        View::EditionView => "\u{2191}\u{2193} Navigate  \u{23CE} Read  e Pick date  Esc Back",
     };
     frame.render_widget(
         Paragraph::new(hints.dark_gray()).alignment(Alignment::Center),
@@ -841,40 +843,281 @@ fn draw_search(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-// ── Editions ──
+// ── Date Picker ──
 
-fn draw_editions(frame: &mut Frame, app: &mut App, area: Rect) {
-    match &app.editions {
-        LoadingState::Loading => { frame.render_widget(Paragraph::new("Loading...").centered().fg(DIM), area); return; }
-        LoadingState::Error(e) => { frame.render_widget(Paragraph::new(format!("Error: {e}")).centered().fg(Color::Red), area); return; }
-        LoadingState::Loaded(_) => {}
-    }
+fn draw_date_picker(frame: &mut Frame, app: &App, area: Rect) {
+    use chrono::{Datelike, NaiveDate};
 
-    let [header, list] = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(area);
+    let date = app.picker_date;
+    let today = chrono::Local::now().date_naive();
 
-    frame.render_widget(Paragraph::new(vec![
-        Line::from(""), Line::from(vec![Span::raw("  "), dot_span(Color::Yellow), "EDITIONS".bold()]),
-    ]), header);
+    // Center the calendar
+    let cal_w: u16 = 28; // 7 columns × 4 chars each
+    let cal_h: u16 = 10; // header + weekday row + 6 week rows + spacing
+    let [_, cal_area, _] = Layout::horizontal([
+        Constraint::Fill(1), Constraint::Length(cal_w + 4), Constraint::Fill(1),
+    ]).areas(area);
+    let [_, cal_box, _] = Layout::vertical([
+        Constraint::Fill(1), Constraint::Length(cal_h + 4), Constraint::Fill(1),
+    ]).areas(cal_area);
 
-    let editions = match &app.editions { LoadingState::Loaded(e) => e, _ => return };
-    let sel = app.editions_view.selected;
+    // Month/year header
+    let month_name = date.format("%B %Y").to_string();
     let mut lines: Vec<Line> = Vec::new();
-    app.editions_view.item_offsets.clear();
-    for (i, ed) in editions.iter().enumerate() {
-        let is_sel = i == sel;
-        app.editions_view.item_offsets.push(lines.len() as u16);
-        let marker = if is_sel { "\u{25B8} " } else { "  " };
-        let bold = if is_sel { Modifier::BOLD } else { Modifier::empty() };
-        lines.push(Line::from(vec![Span::raw("  "), Span::raw(marker), Span::styled(&ed.title, Style::default().add_modifier(bold))]));
-        lines.push(Line::from(vec![Span::raw("      "), ed.date.clone().dark_gray(), format!("  \u{00B7}  {} articles", ed.items.len()).dark_gray()]));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        dot_span(Color::Yellow),
+        month_name.bold(),
+    ]).centered());
+    lines.push(Line::from(""));
+
+    // Weekday headers
+    lines.push(Line::from(vec![
+        "  Mo".dark_gray(), "  Tu".dark_gray(), "  We".dark_gray(),
+        "  Th".dark_gray(), "  Fr".dark_gray(), "  Sa".dark_gray(),
+        "  Su".dark_gray(),
+    ]).centered());
+
+    // Calendar grid
+    let first_of_month = NaiveDate::from_ymd_opt(date.year(), date.month(), 1).unwrap();
+    let weekday_offset = first_of_month.weekday().num_days_from_monday() as usize;
+    let days_in_month = if date.month() == 12 {
+        NaiveDate::from_ymd_opt(date.year() + 1, 1, 1)
+    } else {
+        NaiveDate::from_ymd_opt(date.year(), date.month() + 1, 1)
+    }.unwrap().pred_opt().unwrap().day();
+
+    let mut day = 1u32;
+    for week in 0..6 {
+        let mut spans: Vec<Span> = Vec::new();
+        for col in 0..7 {
+            let cell_idx = week * 7 + col;
+            if cell_idx < weekday_offset || day > days_in_month {
+                spans.push(Span::raw("    "));
+            } else {
+                let d = NaiveDate::from_ymd_opt(date.year(), date.month(), day).unwrap();
+                let label = format!("{:>4}", day);
+                let style = if d == date {
+                    // Selected date
+                    Style::default().add_modifier(Modifier::BOLD | Modifier::REVERSED)
+                } else if d == today {
+                    Style::default().add_modifier(Modifier::BOLD)
+                } else if d > today {
+                    Style::default().fg(DIM)
+                } else {
+                    Style::default()
+                };
+                spans.push(Span::styled(label, style));
+                day += 1;
+            }
+        }
+        lines.push(Line::from(spans).centered());
+        if day > days_in_month { break; }
     }
-    app.editions_view.item_count = editions.len();
-    app.editions_view.ensure_visible(list.height);
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(format!("Selected: {}", date.format("%d %B %Y")).italic()).centered());
+
+    frame.render_widget(Paragraph::new(lines), cal_box);
+}
+
+// ── Edition View (inline articles like web client's EditionViewer) ──
+
+fn draw_edition_view(frame: &mut Frame, app: &mut App, area: Rect) {
+    match &app.edition {
+        LoadingState::Loading => { frame.render_widget(Paragraph::new("Loading edition...").centered().fg(DIM), area); return; }
+        LoadingState::Error(e) => { frame.render_widget(Paragraph::new(format!("Error: {e}")).centered().fg(Color::Red), area); return; }
+        LoadingState::Loaded(None) => {
+            frame.render_widget(
+                Paragraph::new(format!("No edition found for {}", app.picker_date.format("%d %B %Y"))).centered().fg(DIM),
+                area,
+            );
+            return;
+        }
+        LoadingState::Loaded(Some(_)) => {}
+    }
+
+    let edition = match &app.edition { LoadingState::Loaded(Some(ed)) => ed, _ => return };
+
+    let [_, content, _] = Layout::horizontal([
+        Constraint::Fill(1), Constraint::Max(90), Constraint::Fill(1),
+    ]).areas(area);
+
+    let wrap_width = content.width.saturating_sub(4).max(20) as usize;
+
+    // Build all inline article content as lines
+    let sel = app.edition_view.selected;
+    let mut lines: Vec<Line> = Vec::new();
+    let mut offsets: Vec<u16> = Vec::new();
+    let mut heights: Vec<u16> = Vec::new();
+    let mut visible_idx: usize = 0;
+
+    // Edition header
+    let formatted_date = chrono::NaiveDate::parse_from_str(&edition.date, "%Y-%m-%d")
+        .map(|d| d.format("%d %B %Y").to_string())
+        .unwrap_or(edition.date.clone());
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![Span::raw("  "), dot_span(Color::Yellow), edition.title.clone().bold()]));
+    lines.push(Line::from(vec![Span::raw("  "), formatted_date.dark_gray()]));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("  {}", "\u{2508}".repeat(wrap_width.min(60))), Style::default().fg(DIM),
+    )));
+    lines.push(Line::from(""));
+
+    for item in &edition.items {
+        // Skip editors notes, ads, community notes
+        if matches!(&item.content, crate::api::ItemContent::EditorsNote { .. }
+            | crate::api::ItemContent::Advert { .. }
+            | crate::api::ItemContent::CommunityNote { .. }) {
+            continue;
+        }
+
+        let is_sel = visible_idx == sel;
+        let start_line = lines.len() as u16;
+        offsets.push(start_line);
+
+        // Selection marker
+        let sel_marker = if is_sel { "\u{25B8} " } else { "  " };
+
+        // Dot badge + header
+        let hdr_color = item.content.header_color()
+            .and_then(|c| c.accent_rgb())
+            .map(|(r,g,b)| Color::Rgb(r,g,b))
+            .unwrap_or(DIM);
+        if let Some(header) = item.content.header() {
+            lines.push(Line::from(vec![
+                Span::raw("  "), Span::raw(sel_marker), dot_span(hdr_color),
+                Span::styled(header.to_string(), Style::default().fg(hdr_color)),
+            ]));
+        }
+
+        // Title
+        if let Some(title) = &item.title {
+            for l in textwrap::wrap(title, wrap_width) {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(l.to_string(), Style::default().add_modifier(
+                        if is_sel { Modifier::BOLD } else { Modifier::empty() }
+                    )),
+                ]));
+            }
+        }
+
+        // Label
+        if let Some((label, lc)) = item.content.label_info() {
+            let c = lc.light.map(|(r,g,b)| Color::Rgb(r,g,b)).unwrap_or(Color::Red);
+            lines.push(Line::from(vec![Span::raw("  "), label_span(label, c)]));
+        }
+
+        // Authors
+        let authors = item.content.authors();
+        if !authors.is_empty() {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(authors.join(", "), Style::default().add_modifier(Modifier::ITALIC)),
+            ]));
+        }
+
+        lines.push(Line::from(""));
+
+        // Inline content (lead/teaser/body - first few paragraphs)
+        match &item.content {
+            crate::api::ItemContent::Longform { teaser, body, .. } => {
+                if let Some(t) = teaser {
+                    for segs in markdown::wrap_md(t, wrap_width) {
+                        lines.push(Line::from({
+                            let mut spans = vec![Span::raw("  ")];
+                            spans.extend(markdown::segments_to_spans(&segs));
+                            spans
+                        }));
+                    }
+                    lines.push(Line::from(""));
+                }
+                // Show first few content blocks
+                body.iter().take(3).for_each(|block| {
+                    render_inline_block(block, wrap_width, &mut lines);
+                });
+            }
+            crate::api::ItemContent::Feature { lead, .. } => {
+                lead.iter().take(3).for_each(|block| {
+                    render_inline_block(block, wrap_width, &mut lines);
+                });
+            }
+            crate::api::ItemContent::DataVis { description, .. } => {
+                description.iter().take(3).for_each(|block| {
+                    render_inline_block(block, wrap_width, &mut lines);
+                });
+            }
+            crate::api::ItemContent::CulturalRec { description, .. } => {
+                description.iter().take(2).for_each(|block| {
+                    render_inline_block(block, wrap_width, &mut lines);
+                });
+            }
+            _ => {}
+        }
+
+        let item_h = (lines.len() as u16).saturating_sub(start_line);
+        heights.push(item_h);
+        visible_idx += 1;
+
+        // Separator between articles
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            format!("  {}", "\u{2508}".repeat(wrap_width.min(60))), Style::default().fg(DIM),
+        )));
+        lines.push(Line::from(""));
+    }
+
+    app.edition_view.item_offsets = offsets;
+    app.edition_view.item_heights = heights;
+    app.edition_view.item_count = visible_idx;
+    app.edition_view.ensure_visible(content.height);
+
     let total = lines.len();
-    frame.render_widget(Paragraph::new(lines).scroll((app.editions_view.scroll, 0)), list);
-    if total > list.height as usize {
-        let mut sb = ScrollbarState::new(total).position(app.editions_view.scroll as usize).viewport_content_length(list.height as usize);
-        frame.render_stateful_widget(Scrollbar::new(ScrollbarOrientation::VerticalRight).style(Style::default().fg(DIM)), list, &mut sb);
+    let scroll = app.edition_view.scroll;
+    frame.render_widget(Paragraph::new(lines).scroll((scroll, 0)), content);
+
+    if total > content.height as usize {
+        let mut sb = ScrollbarState::new(total).position(scroll as usize)
+            .viewport_content_length(content.height as usize);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight).style(Style::default().fg(DIM)),
+            area, &mut sb,
+        );
+    }
+}
+
+/// Render a single content block inline (for edition viewer)
+fn render_inline_block(block: &crate::api::ContentBlock, wrap_width: usize, lines: &mut Vec<Line<'static>>) {
+    match block {
+        crate::api::ContentBlock::Paragraph(text) => {
+            let segs = markdown::wrap_md(text, wrap_width);
+            for seg_line in segs {
+                let mut spans = vec![Span::raw("  ")];
+                spans.extend(markdown::segments_to_spans(&seg_line));
+                lines.push(Line::from(spans));
+            }
+            lines.push(Line::from(""));
+        }
+        crate::api::ContentBlock::Heading(text) => {
+            lines.push(Line::from(""));
+            for l in textwrap::wrap(text, wrap_width) {
+                lines.push(Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(l.to_string(), Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+                ]));
+            }
+            lines.push(Line::from(""));
+        }
+        crate::api::ContentBlock::Image { caption, .. } => {
+            if let Some(cap) = caption {
+                if !cap.is_empty() {
+                    lines.push(Line::from(format!("  [Image: {}]", cap).italic().dark_gray()));
+                }
+            }
+        }
     }
 }
 

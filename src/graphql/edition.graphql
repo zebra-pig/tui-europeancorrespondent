@@ -1,0 +1,117 @@
+query FetchEditionByDate($date: String, $locale: Locale) {
+    editions(filter: { date: { _eq: $date } }, locale: $locale) {
+        nodes {
+            id
+            title
+            date
+            items {
+                id
+                title
+                slug
+                date
+                previewText
+                wordCount
+                expectedReadTimeSeconds
+                contentType
+                content {
+                    __typename
+                    ... on Longform {
+                        type
+                        longformTitle: title
+                        header
+                        headerColor { light dark }
+                        teaser
+                        authors { firstName lastName }
+                        introductionComment {
+                            ...EditionContentBlock
+                        }
+                        content {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on Feature {
+                        type
+                        featureTitle: title
+                        header
+                        headerColor { light dark }
+                        label
+                        labelColor { light dark }
+                        authors { firstName lastName }
+                        countryCodes
+                        introductionComment {
+                            ...EditionContentBlock
+                        }
+                        lead {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on DataVisualisation {
+                        type
+                        dvTitle: title
+                        header
+                        headerColor { light dark }
+                        label
+                        labelColor { light dark }
+                        authors { firstName lastName }
+                        description {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on CulturalRecommendation {
+                        type
+                        crTitle: title
+                        header
+                        headerColor { light dark }
+                        authors { firstName lastName }
+                        description {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on EditorsNote {
+                        type
+                        authors { firstName lastName }
+                        content {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on CommunityNote {
+                        type
+                        cnTitle: title
+                        label
+                        signature
+                        authors { firstName lastName }
+                        descriptionTop {
+                            ...EditionContentBlock
+                        }
+                    }
+                    ... on Advert {
+                        type
+                        adTitle: title
+                    }
+                }
+            }
+        }
+    }
+}
+
+fragment EditionContentBlock on ContentBlock {
+    __typename
+    ... on ParagraphContentBlock {
+        type
+        text
+    }
+    ... on HeadingContentBlock {
+        type
+        text
+    }
+    ... on ImageContentBlock {
+        type
+        image {
+            url(transform: { width: 500, quality: 70, format: WEBP, fit: COVER })
+            width
+            height
+            caption
+            alt
+        }
+    }
+}
