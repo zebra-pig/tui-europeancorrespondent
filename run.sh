@@ -1,11 +1,11 @@
 #!/bin/sh
-# Install The European Correspondent TUI permanently
-# Usage: curl -fsSL https://raw.githubusercontent.com/zebra-pig/tui-europeancorrespondent/main/install.sh | sh
+# Download and run The European Correspondent TUI (no permanent install)
+# Usage: curl -fsSL https://raw.githubusercontent.com/zebra-pig/tui-europeancorrespondent/main/run.sh | sh
 set -e
 
 REPO="zebra-pig/tui-europeancorrespondent"
 BINARY="tui-europeancorrespondent"
-INSTALL_DIR="${HOME}/.local/bin"
+INSTALL_DIR="${TMPDIR:-/tmp}/european-correspondent"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -33,7 +33,7 @@ BIN_PATH="${INSTALL_DIR}/${BINARY}${EXT}"
 echo "The European Correspondent - Terminal Edition"
 echo "=============================================="
 echo ""
-echo "Installing to: ${BIN_PATH}"
+echo "Platform: ${OS} ${ARCH}"
 echo ""
 
 if command -v curl >/dev/null 2>&1; then
@@ -48,15 +48,7 @@ fi
 chmod +x "$BIN_PATH" 2>/dev/null || true
 
 echo ""
-echo "Installed successfully!"
-echo ""
-echo "Run with: ${BINARY}"
-echo ""
 
-# Add ~/.local/bin to PATH hint if not already there
-case ":$PATH:" in
-    *":${INSTALL_DIR}:"*) ;;
-    *) echo "Note: Add ${INSTALL_DIR} to your PATH if not already:"
-       echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
-       echo "" ;;
-esac
+# Redirect stdin from /dev/tty so the TUI can read keyboard input
+# (when run via curl | sh, stdin is the pipe, not the terminal)
+exec "$BIN_PATH" "$@" </dev/tty
