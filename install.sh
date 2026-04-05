@@ -28,7 +28,7 @@ ASSET_NAME="${BINARY}-${TARGET}${EXT}"
 RELEASE_URL="https://github.com/${REPO}/releases/latest/download/${ASSET_NAME}"
 
 mkdir -p "$INSTALL_DIR"
-BIN_PATH="${INSTALL_DIR}/${BINARY}${EXT}"
+BIN_PATH="${INSTALL_DIR}/tec${EXT}"
 
 echo "The European Correspondent - Terminal Edition"
 echo "=============================================="
@@ -50,7 +50,7 @@ chmod +x "$BIN_PATH" 2>/dev/null || true
 echo ""
 echo "Installed successfully!"
 echo ""
-echo "Run with: ${BINARY}"
+echo "Run with: tec"
 echo ""
 
 # Add ~/.local/bin to PATH hint if not already there
