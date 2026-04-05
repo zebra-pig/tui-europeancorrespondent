@@ -37,8 +37,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
-    // Detect image protocol before raw mode
-    let picker = Picker::from_query_stdio().ok();
+    // Try to detect image protocol. from_query_stdio() can corrupt terminal
+    // state on some platforms, so we catch errors and reset.
+    let picker = match Picker::from_query_stdio() {
+        Ok(p) => Some(p),
+        Err(_) => {
+            // Reset terminal state in case the query corrupted it
+            let _ = crossterm::terminal::disable_raw_mode();
+            let _ = crossterm::execute!(stdout(), crossterm::terminal::LeaveAlternateScreen);
+            // Use halfblocks fallback
+            Some(Picker::from_fontsize((8, 16)))
+        }
+    };
 
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
