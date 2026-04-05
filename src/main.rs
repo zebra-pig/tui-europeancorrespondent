@@ -41,9 +41,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
 
-    // Detect image protocol after entering raw mode (safer)
+    // Use halfblocks protocol (works everywhere, no terminal queries needed)
     #[allow(deprecated)]
-    let picker = Some(Picker::from_query_stdio().unwrap_or_else(|_| Picker::from_fontsize((8, 16))));
+    let picker: Option<Picker> = Some(Picker::from_fontsize((8, 16)));
 
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     let mut app = App::new();
