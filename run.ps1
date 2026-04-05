@@ -8,7 +8,7 @@ $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitec
 $asset = "$binary-$arch-pc-windows-msvc.exe"
 $url = "https://github.com/$repo/releases/latest/download/$asset"
 
-$installDir = Join-Path $env:TEMP "european-correspondent"
+$installDir = Join-Path $env:TEMP "europeancorrespondent"
 $binPath = Join-Path $installDir "$binary.exe"
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null

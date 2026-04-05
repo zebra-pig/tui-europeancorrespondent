@@ -5,7 +5,7 @@ set -e
 
 REPO="zebra-pig/tui-europeancorrespondent"
 BINARY="tui-europeancorrespondent"
-INSTALL_DIR="${TMPDIR:-/tmp}/european-correspondent"
+INSTALL_DIR="${TMPDIR:-/tmp}/europeancorrespondent"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
