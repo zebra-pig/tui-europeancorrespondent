@@ -69,6 +69,8 @@ pub struct App {
     pub home_buffer: Option<ratatui::buffer::Buffer>,
     pub home_buffer_size: (u16, u16),
     pub home_dirty: bool,
+    /// Tile rects in virtual coordinates (for selection overlay)
+    pub home_tile_rects: Vec<(usize, ratatui::layout::Rect)>, // (item_index, rect)
 
     pub article: LoadingState<EditionItem>,
     pub article_scroll: u16,
@@ -122,6 +124,7 @@ impl App {
             home_buffer: None,
             home_buffer_size: (0, 0),
             home_dirty: true,
+            home_tile_rects: Vec::new(),
             article: LoadingState::Loading,
             article_scroll: 0,
             article_lines: Vec::new(),
@@ -187,12 +190,15 @@ impl App {
             lines.push(ArticleLine::Blank);
         }
 
-        // Title
-        if let Some(title) = &item.title {
-            for line in textwrap::wrap(title, wrap_width) {
-                lines.push(ArticleLine::Title(line.to_string()));
+        // Title (skip for DataVis - they show only the dot badge header)
+        let is_datavis = matches!(&item.content, ItemContent::DataVis { .. });
+        if !is_datavis {
+            if let Some(title) = &item.title {
+                for line in textwrap::wrap(title, wrap_width) {
+                    lines.push(ArticleLine::Title(line.to_string()));
+                }
+                lines.push(ArticleLine::Blank);
             }
-            lines.push(ArticleLine::Blank);
         }
 
         // Formatted date (e.g. "25 March 2026")

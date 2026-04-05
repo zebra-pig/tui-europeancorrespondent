@@ -213,13 +213,14 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
         let mut offscreen = Buffer::empty(buf_area);
 
         let mut hero_item_offset: usize = 0;
+        let mut tile_rects: Vec<(usize, Rect)> = Vec::new();
         for sl in &section_layouts {
             match sl {
                 SectionLayout::Hero { y, height, count } => {
                     let hero_rect = Rect { x: 0, y: *y, width: w, height: *height };
                     render_hero_grid(
                         &mut offscreen, &mut image_cache, &all_items[hero_item_offset..hero_item_offset + count],
-                        hero_rect, 999, hero_item_offset, // 999 = no selection in cached buffer
+                        hero_rect, 999, hero_item_offset, &mut tile_rects,
                     );
                     hero_item_offset += count;
                 }
@@ -230,6 +231,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
                 SectionLayout::Highlight { y, height, item_index, reversed } => {
                     if let Some(item) = all_items.get(*item_index) {
                         let rect = Rect { x: 0, y: *y, width: w, height: *height };
+                        tile_rects.push((*item_index, rect));
                         render_highlight(
                             &mut offscreen, &mut image_cache, item, rect,
                             false, *reversed, // never focused in cached buffer
@@ -242,6 +244,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
         app.image_cache = image_cache;
         app.home_buffer = Some(offscreen);
         app.home_buffer_size = (w, total_h);
+        app.home_tile_rects = tile_rects;
         app.home_dirty = false;
     }
 
@@ -263,42 +266,10 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
     if let Some(&sel_y) = app.home_view.item_offsets.get(selected) {
         let frame_buf = frame.buffer_mut();
 
-        // Find if this is a tile and get its virtual rect
-        let mut tile_rect: Option<Rect> = None;
-        for sl in &section_layouts {
-            if let SectionLayout::Hero { y, height, count } = sl {
-                let hero_start = app.home_view.item_offsets.iter()
-                    .position(|&o| o >= *y).unwrap_or(usize::MAX);
-                if selected >= hero_start && selected < hero_start + count {
-                    let gap = 2u16;
-                    if w >= 96 && *count >= 5 {
-                        let usable = w.saturating_sub(gap * 2);
-                        let col_l = usable * 2 / 7;
-                        let col_c = usable * 3 / 7;
-                        let col_r = usable - col_l - col_c;
-                        let half = *height / 2;
-                        tile_rect = Some(match selected - hero_start {
-                            0 => Rect { x: col_l + gap, y: *y, width: col_c, height: *height },
-                            1 => Rect { x: 0, y: *y, width: col_l, height: half },
-                            2 => Rect { x: col_l + gap + col_c + gap, y: *y, width: col_r, height: half },
-                            3 => Rect { x: 0, y: *y + half, width: col_l, height: *height - half },
-                            4 => Rect { x: col_l + gap + col_c + gap, y: *y + half, width: col_r, height: *height - half },
-                            _ => Rect { x: 0, y: *y, width: w, height: *height },
-                        });
-                    } else {
-                        // Stacked layout
-                        let tile_h = *height / (*count).max(1) as u16;
-                        let local = selected - hero_start;
-                        tile_rect = Some(Rect { x: 0, y: *y + (local as u16) * tile_h, width: w, height: tile_h });
-                    }
-                }
-            }
-            if let SectionLayout::Highlight { item_index, y, height, .. } = sl {
-                if selected == *item_index {
-                    tile_rect = Some(Rect { x: 0, y: *y, width: w, height: *height });
-                }
-            }
-        }
+        // Look up actual tile rect from stored layout data
+        let tile_rect = app.home_tile_rects.iter()
+            .find(|(idx, _)| *idx == selected)
+            .map(|(_, r)| *r);
 
         if let Some(tr) = tile_rect {
             // Draw rounded border characters into the space-border cells
@@ -371,6 +342,7 @@ fn render_hero_grid(
     area: Rect,
     selected: usize,
     base_idx: usize,
+    tile_rects: &mut Vec<(usize, Rect)>,
 ) {
     if items.is_empty() || area.height < 4 { return; }
 
@@ -393,6 +365,12 @@ fn render_hero_grid(
             .spacing(Spacing::Space(1))
             .areas(right);
 
+        tile_rects.push((base_idx, center));
+        tile_rects.push((base_idx + 1, lt));
+        tile_rects.push((base_idx + 2, rt));
+        if items.len() > 3 { tile_rects.push((base_idx + 3, lb)); }
+        if items.len() > 4 { tile_rects.push((base_idx + 4, rb)); }
+
         render_tile_buf(buf, image_cache, items[0], center, base_idx == selected, true);
         render_tile_buf(buf, image_cache, items[1], lt, base_idx + 1 == selected, false);
         render_tile_buf(buf, image_cache, items[2], rt, base_idx + 2 == selected, false);
@@ -404,18 +382,21 @@ fn render_hero_grid(
             .spacing(Spacing::Space(gap))
             .areas(area);
 
+        tile_rects.push((base_idx, left));
         render_tile_buf(buf, image_cache, items[0], left, base_idx == selected, true);
 
         let n = (items.len() - 1).min(4);
         let constraints: Vec<Constraint> = (0..n).map(|_| Constraint::Fill(1)).collect();
         let rows = Layout::vertical(constraints).spacing(Spacing::Space(1)).split(right);
         for (i, r) in rows.iter().enumerate() {
+            tile_rects.push((base_idx + i + 1, *r));
             render_tile_buf(buf, image_cache, items[i + 1], *r, base_idx + i + 1 == selected, false);
         }
     } else {
         let constraints: Vec<Constraint> = items.iter().map(|_| Constraint::Fill(1)).collect();
         let rows = Layout::vertical(constraints).spacing(Spacing::Space(1)).split(area);
         for (i, r) in rows.iter().enumerate() {
+            tile_rects.push((base_idx + i, *r));
             render_tile_buf(buf, image_cache, items[i], *r, base_idx + i == selected, i == 0);
         }
     }
