@@ -282,9 +282,7 @@ fn draw_home(frame: &mut Frame, app: &mut App, area: Rect) {
             .find(|(idx, _)| *idx == selected)
             .map(|(_, r)| *r);
 
-        if let Some(mut tr) = tile_rect {
-            // Layout may include 1 extra cell from spacing rounding - clamp to content
-            tr.width = tr.width.saturating_sub(1);
+        if let Some(tr) = tile_rect {
             // Draw rounded border characters into the space-border cells
             let border = ratatui::symbols::border::ROUNDED;
             let set_cell = |buf: &mut Buffer, vx: u16, vy: u16, sym: &str| {
